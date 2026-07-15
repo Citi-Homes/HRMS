@@ -107,13 +107,20 @@ function renderShell() {
   $("#appView").hidden = !state.session;
   if (!state.session) return;
 
-  const email = state.session.user?.email || "Admin";
-  $("#roleLabel").textContent = `${email} · secure workspace`;
+  const email = state.session.user?.email?.toLowerCase() || "admin";
+  $("#roleLabel").textContent = `${email} · Secure Workspace`;
   $("#navList").innerHTML = pages.map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
     </button>`
   )).join("");
+}
+
+function setTopActions(mode) {
+  const dashboardMode = mode === "dashboard";
+  $("#globalSearch").hidden = dashboardMode;
+  $("#refreshButton").textContent = dashboardMode ? "Sign out" : "Refresh";
+  $("#refreshButton").dataset.action = dashboardMode ? "signout" : "refresh";
 }
 
 function metric(label, value) {
@@ -124,6 +131,7 @@ function renderDashboard() {
   $("#dashboard").hidden = false;
   $("#tablePage").hidden = true;
   $("#pageTitle").textContent = "Dashboard";
+  setTopActions("dashboard");
 
   const employeeCount = (state.rows.employees || []).length;
   const recruitmentOpen = (state.rows.recruitment || []).filter((row) => !["Joined", "Rejected"].includes(row.status)).length;
@@ -158,6 +166,7 @@ function renderTablePage(page) {
   $("#dashboard").hidden = true;
   $("#tablePage").hidden = false;
   $("#pageTitle").textContent = page.label;
+  setTopActions("table");
 
   const rows = filteredRows(page);
   $("#summaryCards").innerHTML = `
@@ -295,6 +304,13 @@ $("#logoutButton").addEventListener("click", async () => {
 });
 
 $("#refreshButton").addEventListener("click", async () => {
+  if ($("#refreshButton").dataset.action === "signout") {
+    if (client) await client.auth.signOut();
+    state.session = null;
+    state.rows = {};
+    renderShell();
+    return;
+  }
   await loadPageData();
   await showPage(state.page);
 });
