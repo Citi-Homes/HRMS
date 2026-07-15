@@ -158,6 +158,34 @@ h1 {
 
 .login-form { display: grid; gap: 1rem; }
 
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  padding-right: 5.4rem;
+}
+
+.password-field button {
+  position: absolute;
+  top: 50%;
+  right: 0.42rem;
+  transform: translateY(-50%);
+  min-width: 4.3rem;
+  padding: 0.46rem 0.7rem;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(36, 37, 39, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 8px 18px rgba(36, 37, 39, 0.08);
+}
+
+.password-field button:hover {
+  transform: translateY(-50%);
+}
+
 .form-message {
   min-height: 1.25rem;
   color: var(--red);
