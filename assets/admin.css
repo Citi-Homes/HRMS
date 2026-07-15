@@ -248,6 +248,17 @@ h1 {
   text-transform: uppercase;
 }
 
+#accessLabel {
+  width: fit-content;
+}
+
+#accessLabel.super-user-badge {
+  padding: 0.18rem 0.48rem;
+  border: 1px solid rgba(185, 154, 95, 0.24);
+  border-radius: 999px;
+  background: rgba(185, 154, 95, 0.12);
+}
+
 .top-title {
   justify-self: center;
   min-width: 0;
