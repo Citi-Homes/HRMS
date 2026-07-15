@@ -185,6 +185,7 @@ h1 {
   font-weight: 920;
   letter-spacing: 0;
   line-height: 0.88;
+  margin-left: -0.13em;
 }
 
 .login-subtitle {
