@@ -55,10 +55,12 @@ let state = {
 const $ = (selector) => document.querySelector(selector);
 
 const displayNames = {
-  "umer@citihomes.ae": "Umer Raza"
+  "umer@citihomes.ae": "Umer Raza",
+  "test@citihomes.ae": "Test Profile"
 };
 
 const superUserEmails = new Set(["umer@citihomes.ae"]);
+const viewerEmails = new Set(["test@citihomes.ae"]);
 
 function titleize(value) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -75,6 +77,14 @@ function normalizedEmail() {
 
 function isSuperUser() {
   return superUserEmails.has(normalizedEmail()) || state.portalUser?.role === "Super User";
+}
+
+function isViewer() {
+  return viewerEmails.has(normalizedEmail()) || state.portalUser?.role === "Viewer";
+}
+
+function canEdit() {
+  return !isViewer();
 }
 
 function updateAbuDhabiTime() {
@@ -181,8 +191,9 @@ function renderShell() {
 
   const displayName = displayNameForEmail(state.session.user?.email);
   $("#roleLabel").textContent = displayName;
-  $("#accessLabel").textContent = isSuperUser() ? "Super User · Full Access" : "Secure Workspace";
+  $("#accessLabel").textContent = isSuperUser() ? "Super User · Full Access" : isViewer() ? "Test Profile · View Only" : "Secure Workspace";
   $("#accessLabel").classList.toggle("super-user-badge", isSuperUser());
+  $("#accessLabel").classList.toggle("viewer-badge", isViewer());
   $("#navList").innerHTML = pages.map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
@@ -258,7 +269,7 @@ function renderTablePage(page) {
 
   $("#pageTools").innerHTML = page.filters ? page.filters.map((item) => (
     `<button class="pill ${state.activeFilter === item ? "active" : ""}" data-filter="${item}">${item}</button>`
-  )).join("") : "";
+  )).join("") : isViewer() ? `<span class="viewer-notice">View only mode</span>` : "";
 
   renderTable(page, rows);
   renderForm(page);
@@ -279,8 +290,9 @@ function renderTable(page, rows) {
           <td>${index + 1}</td>
           ${cols.map((col) => `<td>${fieldControl(col, row[col] ?? "")}</td>`).join("")}
           <td class="row-actions">
-            <button data-save="${row.id}">Save</button>
-            <button class="danger" data-delete="${row.id}">Delete</button>
+            ${canEdit()
+              ? `<button data-save="${row.id}">Save</button><button class="danger" data-delete="${row.id}">Delete</button>`
+              : `<span class="view-only-pill">View only</span>`}
           </td>
         </tr>
       `).join("")}
@@ -290,16 +302,23 @@ function renderTable(page, rows) {
 
 function fieldControl(column, value) {
   const safeValue = String(value).replaceAll('"', "&quot;");
+  const disabled = canEdit() ? "" : " disabled";
   if (options[column]) {
-    return `<select data-field="${column}">${options[column].map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
+    return `<select data-field="${column}"${disabled}>${options[column].map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
   }
   const type = column.includes("date") || column.includes("expiry") || column.includes("renewal") ? "date" : "text";
-  return `<input data-field="${column}" type="${type}" value="${safeValue}">`;
+  return `<input data-field="${column}" type="${type}" value="${safeValue}"${disabled}>`;
 }
 
 function renderForm(page) {
   const cols = columns[page.table] || [];
   $("#addRecordPanel").open = false;
+  $("#addRecordPanel").hidden = isViewer();
+  if (isViewer()) {
+    $("#recordForm").innerHTML = "";
+    return;
+  }
+  $("#addRecordPanel").hidden = false;
   $("#recordForm").innerHTML = cols.map((col) => (
     `<label>${titleize(col)}${fieldControl(col, col === "department" ? "Operations" : "")}</label>`
   )).join("") + `<button type="submit">Add Record</button>`;
@@ -345,6 +364,10 @@ document.addEventListener("click", async (event) => {
     if (filterButton) {
       state.activeFilter = filterButton.dataset.filter;
       await showPage(state.page);
+    }
+    if ((saveButton || deleteButton) && !canEdit()) {
+      alert("This test profile is view-only.");
+      return;
     }
     if (saveButton) {
       const page = pages.find((item) => item.key === state.page);
@@ -404,6 +427,10 @@ $("#globalSearch").addEventListener("input", async (event) => {
 
 $("#recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!canEdit()) {
+    alert("This test profile is view-only.");
+    return;
+  }
   const page = pages.find((item) => item.key === state.page);
   const row = rowFromElement(event.currentTarget);
   await upsertRow(page.table, row);
