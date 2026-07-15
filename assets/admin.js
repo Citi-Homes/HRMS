@@ -73,7 +73,7 @@ function updateAbuDhabiTime() {
     minute: "2-digit",
     hour12: true
   });
-  $("#abuDhabiTime").textContent = `Abu Dhabi ${formatter.format(new Date())}`;
+  $("#abuDhabiTime").textContent = formatter.format(new Date());
 }
 
 async function loadAbuDhabiWeather() {
@@ -114,7 +114,7 @@ function requestJson(url) {
 }
 
 function renderAbuDhabiWeather() {
-  $("#abuDhabiWeather").textContent = state.weather === null ? "Weather --°C" : `Weather ${state.weather}°C`;
+  $("#abuDhabiWeather").textContent = state.weather === null ? "--°C" : `${state.weather}°C`;
 }
 
 function departmentGroup(value = "") {
@@ -169,7 +169,7 @@ function renderShell() {
   if (!state.session) return;
 
   const displayName = displayNameForEmail(state.session.user?.email);
-  $("#roleLabel").textContent = `${displayName} · Secure Workspace`;
+  $("#roleLabel").textContent = displayName;
   $("#navList").innerHTML = pages.map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
