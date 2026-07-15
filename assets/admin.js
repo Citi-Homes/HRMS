@@ -399,6 +399,14 @@ $("#loginForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("#passwordToggle").addEventListener("click", () => {
+  const password = $("#password");
+  const showing = password.type === "text";
+  password.type = showing ? "password" : "text";
+  $("#passwordToggle").textContent = showing ? "Show" : "Hide";
+  $("#passwordToggle").setAttribute("aria-label", showing ? "Show password" : "Hide password");
+});
+
 $("#logoutButton").addEventListener("click", async () => {
   if (client) await client.auth.signOut();
   state.session = null;
