@@ -102,9 +102,9 @@ label {
 }
 
 .login-panel {
-  width: min(570px, 100%);
+  width: min(500px, 100%);
   border-radius: 20px;
-  padding: 2rem;
+  padding: 1.65rem;
 }
 
 .login-panel.glass {
