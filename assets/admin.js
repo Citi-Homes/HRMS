@@ -52,8 +52,17 @@ let state = {
 
 const $ = (selector) => document.querySelector(selector);
 
+const displayNames = {
+  "umer@citihomes.ae": "Umer Raza"
+};
+
 function titleize(value) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function displayNameForEmail(email = "") {
+  const normalized = String(email).toLowerCase();
+  return displayNames[normalized] || normalized || "Admin";
 }
 
 function departmentGroup(value = "") {
@@ -107,8 +116,8 @@ function renderShell() {
   $("#appView").hidden = !state.session;
   if (!state.session) return;
 
-  const email = state.session.user?.email?.toLowerCase() || "admin";
-  $("#roleLabel").textContent = `${email} · Secure Workspace`;
+  const displayName = displayNameForEmail(state.session.user?.email);
+  $("#roleLabel").textContent = `${displayName} · Secure Workspace`;
   $("#navList").innerHTML = pages.map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
