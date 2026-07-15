@@ -49,7 +49,8 @@ let state = {
   rows: {},
   activeFilter: "All",
   search: "",
-  weather: null
+  weather: null,
+  savedRows: new Set()
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -288,13 +289,18 @@ function renderTable(page, rows) {
           ${cols.map((col) => `<td>${fieldControl(col, row[col] ?? "")}</td>`).join("")}
           <td class="row-actions">
             ${canEdit()
-              ? `<button data-save="${row.id}">Save</button><button class="danger" data-delete="${row.id}">Delete</button>`
+              ? `${saveButtonMarkup(page.table, row.id)}<button class="danger" data-delete="${row.id}">Delete</button>`
               : `<span class="view-only-pill">View only</span>`}
           </td>
         </tr>
       `).join("")}
     </tbody>
   `;
+}
+
+function saveButtonMarkup(table, id) {
+  const saved = state.savedRows.has(`${table}:${id}`);
+  return `<button class="save-button ${saved ? "saved" : ""}" data-save="${id}" aria-label="${saved ? "Saved" : "Save record"}">${saved ? "✓" : "Save"}</button>`;
 }
 
 function fieldControl(column, value) {
@@ -368,7 +374,14 @@ document.addEventListener("click", async (event) => {
     }
     if (saveButton) {
       const page = pages.find((item) => item.key === state.page);
-      await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
+      saveButton.disabled = true;
+      saveButton.classList.add("saving");
+      saveButton.textContent = "";
+      const savedRow = await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
+      state.savedRows.add(`${page.table}:${savedRow.id}`);
+      saveButton.classList.remove("saving");
+      saveButton.classList.add("saved");
+      saveButton.textContent = "✓";
       state.rows[page.table] = await fetchRows(page.table);
       await showPage(state.page);
     }
