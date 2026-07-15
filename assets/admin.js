@@ -200,17 +200,14 @@ function renderShell() {
   )).join("");
 }
 
-function setTopActions(mode) {
-  const dashboardMode = mode === "dashboard";
-  $(".topbar").classList.toggle("dashboard-topbar", dashboardMode);
-  $(".table-search").hidden = dashboardMode;
-  $("#dashboardMeta").hidden = !dashboardMode;
-  $("#refreshButton").textContent = dashboardMode ? "Sign out" : "Refresh";
-  $("#refreshButton").dataset.action = dashboardMode ? "signout" : "refresh";
-  if (dashboardMode) {
-    updateAbuDhabiTime();
-    renderAbuDhabiWeather();
-  }
+function setTopActions() {
+  $(".topbar").classList.add("dashboard-topbar");
+  $(".table-search").hidden = true;
+  $("#dashboardMeta").hidden = false;
+  $("#refreshButton").textContent = "Sign out";
+  $("#refreshButton").dataset.action = "signout";
+  updateAbuDhabiTime();
+  renderAbuDhabiWeather();
 }
 
 function metric(label, value) {
