@@ -399,12 +399,21 @@ $("#loginForm").addEventListener("submit", async (event) => {
   }
 });
 
-$("#passwordToggle").addEventListener("click", () => {
+function setPasswordVisible(visible) {
   const password = $("#password");
-  const showing = password.type === "text";
-  password.type = showing ? "password" : "text";
-  $("#passwordToggle").textContent = showing ? "Show" : "Hide";
-  $("#passwordToggle").setAttribute("aria-label", showing ? "Show password" : "Hide password");
+  password.type = visible ? "text" : "password";
+  $("#passwordToggle").textContent = visible ? "Hide" : "Show";
+}
+
+["mousedown", "touchstart", "pointerdown"].forEach((eventName) => {
+  $("#passwordToggle").addEventListener(eventName, (event) => {
+    event.preventDefault();
+    setPasswordVisible(true);
+  });
+});
+
+["mouseup", "mouseleave", "blur", "touchend", "touchcancel", "pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
+  $("#passwordToggle").addEventListener(eventName, () => setPasswordVisible(false));
 });
 
 $("#logoutButton").addEventListener("click", async () => {
