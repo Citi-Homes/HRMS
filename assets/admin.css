@@ -254,6 +254,17 @@ h1 {
   backdrop-filter: blur(3px) saturate(1.35);
 }
 
+.login-form input:-webkit-autofill,
+.login-form input:-webkit-autofill:hover,
+.login-form input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--ink);
+  -webkit-box-shadow:
+    0 0 0 1000px rgba(255, 255, 255, 0.08) inset,
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 10px 24px rgba(36, 37, 39, 0.06);
+  transition: background-color 9999s ease-out;
+}
+
 .login-form > button[type="submit"] {
   min-height: 46px;
   margin-top: 0.18rem;
@@ -300,8 +311,9 @@ h1 {
 }
 
 .form-message {
-  min-height: 0.95rem;
+  min-height: 0.55rem;
   margin-bottom: 0;
+  line-height: 1;
   color: var(--red);
   font-weight: 650;
 }
