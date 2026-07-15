@@ -4,7 +4,7 @@ const client = supabaseReady ? window.supabase.createClient(config.url, config.a
 
 const pages = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "employees", label: "Employee Master", table: "employees", filters: ["All", "Operations", "P&C and Administration", "Procurement"] },
+  { key: "employees", label: "Employee Master", table: "employees", filters: ["All", "Operations", "P&C", "Procurement", "Finance"] },
   { key: "recruitment", label: "Recruitment Tracker", table: "recruitment" },
   { key: "interview_evaluation", label: "Interview Evaluation", table: "interview_evaluation" },
   { key: "attendance", label: "Attendance Portal", external: "https://citi-homes.github.io/Attendance.Portal/index.html" },
@@ -33,7 +33,7 @@ const columns = {
 };
 
 const options = {
-  department: ["Operations", "P&C and Administration", "Procurement"],
+  department: ["Operations", "P&C", "Procurement", "Finance"],
   status: ["Active", "Probation", "Inactive", "Applied", "Screening", "Shortlisted", "Interview Scheduled", "Selected", "Offer Sent", "Joined", "Rejected", "Hold", "Pending", "In Progress", "Completed", "Valid", "Expiring Soon", "Expired"],
   final_decision: ["Strongly recommended", "Recommended", "Recommended with reservations", "Do not recommend"],
   employment_type: ["Employee", "Contract", "Temporary", "Intern"],
@@ -141,7 +141,8 @@ function renderAbuDhabiWeather() {
 function departmentGroup(value = "") {
   const text = String(value).toLowerCase();
   if (text.includes("procurement")) return "Procurement";
-  if (text.includes("p&c") || text.includes("admin") || text.includes("culture")) return "P&C and Administration";
+  if (text.includes("finance")) return "Finance";
+  if (text.includes("p&c") || text.includes("admin") || text.includes("culture")) return "P&C";
   return "Operations";
 }
 
