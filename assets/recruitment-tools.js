@@ -19,6 +19,16 @@
     return superUserEmails.has(currentEmail());
   }
 
+  let scheduled = false;
+  function schedulePageTools() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      addPageTools();
+    });
+  }
+
   function csvCell(value) {
     const text = String(value || "").trim();
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -169,9 +179,17 @@
       event.preventDefault();
       downloadTemplate();
     }
-    setTimeout(addPageTools, 50);
+    setTimeout(schedulePageTools, 50);
   });
 
-  new MutationObserver(addPageTools).observe(document.body, { childList: true, subtree: true });
-  addPageTools();
+  new MutationObserver((mutations) => {
+    const shouldUpdate = mutations.some((mutation) => (
+      mutation.target.id === "pageTools" ||
+      mutation.target.id === "addRecordPanel" ||
+      mutation.target.id === "pageTitle" ||
+      mutation.target.closest?.("#pageTools, #addRecordPanel, #tablePage")
+    ));
+    if (shouldUpdate) schedulePageTools();
+  }).observe(document.body, { childList: true, subtree: true });
+  schedulePageTools();
 })();
