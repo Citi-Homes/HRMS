@@ -1,13 +1,10 @@
-(() => {
-sanitizeLoginUrl();
-
 const config = window.CITI_HOMES_SUPABASE || {};
 const supabaseReady = Boolean(config.url && config.anonKey && config.anonKey.length > 20);
 const client = supabaseReady ? window.supabase.createClient(config.url, config.anonKey) : null;
 
 const pages = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "employees", label: "Employee Master", table: "employees", filters: ["All", "Operations", "P&C", "Procurement", "Finance"] },
+  { key: "employees", label: "Employee Master", table: "employees", filters: ["All", "Operations", "P&C and Administration", "Procurement"] },
   { key: "recruitment", label: "Recruitment Tracker", table: "recruitment" },
   { key: "interview_evaluation", label: "Interview Evaluation", table: "interview_evaluation" },
   { key: "attendance", label: "Attendance Portal", external: "https://citi-homes.github.io/Attendance.Portal/index.html" },
@@ -36,7 +33,7 @@ const columns = {
 };
 
 const options = {
-  department: ["Operations", "P&C", "Procurement", "Finance"],
+  department: ["Operations", "P&C and Administration", "Procurement"],
   status: ["Active", "Probation", "Inactive", "Applied", "Screening", "Shortlisted", "Interview Scheduled", "Selected", "Offer Sent", "Joined", "Rejected", "Hold", "Pending", "In Progress", "Completed", "Valid", "Expiring Soon", "Expired"],
   final_decision: ["Strongly recommended", "Recommended", "Recommended with reservations", "Do not recommend"],
   employment_type: ["Employee", "Contract", "Temporary", "Intern"],
@@ -45,34 +42,13 @@ const options = {
   reminder_sent: ["No", "Yes"]
 };
 
-const importAliases = {
-  recruitment: {
-
-    candidate: ["candidate", "candidate name", "candidate full name", "candidate's name", "name of candidate", "name", "full name", "applicant", "applicant name", "applicant full name"],
-
-    candidate: ["candidate", "candidate name", "name", "applicant", "applicant name"],
-
-    position: ["position", "job title", "role", "designation", "applied position"],
-    source: ["source", "cv source", "recruitment source"],
-    mobile: ["mobile", "phone", "contact", "contact number", "mobile number"],
-    location: ["location", "city", "current location"],
-    gcc_experience: ["gcc experience", "gcc_experience", "gcc exp"],
-    total_experience: ["total experience", "total_experience", "experience"],
-    current_salary: ["current salary", "current_salary", "salary"],
-    expected_salary: ["expected salary", "expected_salary", "expected"],
-    notice_period: ["notice period", "notice_period", "notice"],
-
-    interview_date: ["interview date", "interview_date", "interview scheduled date", "scheduled date"],
-
-    interview_date: ["interview date", "interview_date", "date"],
-
-    status: ["status", "stage"]
-  }
+const displayNames = {
+  "umer@citihomes.ae": "Umer Raza",
+  "test@citihomes.ae": "Test Profile"
 };
 
-const numericImportColumns = {
-  recruitment: new Set(["gcc_experience", "total_experience", "current_salary", "expected_salary"])
-};
+const superUserEmails = new Set(["umer@citihomes.ae"]);
+const viewerEmails = new Set(["test@citihomes.ae"]);
 
 let state = {
   session: null,
@@ -81,29 +57,10 @@ let state = {
   rows: {},
   activeFilter: "All",
   search: "",
-  weather: null,
   savedRows: new Set()
 };
 
 const $ = (selector) => document.querySelector(selector);
-const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-function sanitizeLoginUrl() {
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has("email") && !url.searchParams.has("password")) return;
-  url.searchParams.delete("email");
-  url.searchParams.delete("password");
-  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-}
-
-const displayNames = {
-  "umer@citihomes.ae": "Umer Raza",
-  "test@citihomes.ae": "Test Profile"
-};
-
-const superUserEmails = new Set(["umer@citihomes.ae"]);
-const viewerEmails = new Set(["test@citihomes.ae"]);
-const dashboardTables = ["employees", "recruitment", "documents", "utilities"];
 
 function titleize(value) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -118,6 +75,13 @@ function normalizedEmail() {
   return String(state.session?.user?.email || "").toLowerCase();
 }
 
+function departmentGroup(value = "") {
+  const text = String(value).toLowerCase();
+  if (text.includes("procurement")) return "Procurement";
+  if (text.includes("p&c") || text.includes("admin") || text.includes("culture")) return "P&C and Administration";
+  return "Operations";
+}
+
 function isSuperUser() {
   return superUserEmails.has(normalizedEmail()) || state.portalUser?.role === "Super User";
 }
@@ -127,66 +91,24 @@ function isViewer() {
 }
 
 function canEdit() {
-  return !isViewer();
+  return !isViewer() || isSuperUser();
 }
 
-function updateAbuDhabiTime() {
-  const formatter = new Intl.DateTimeFormat("en-AE", {
-    timeZone: "Asia/Dubai",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true
-  });
-  $("#abuDhabiTime").textContent = formatter.format(new Date());
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-async function loadAbuDhabiWeather() {
-  try {
-    const payload = await requestJson("https://api.open-meteo.com/v1/forecast?latitude=24.4539&longitude=54.3773&current=temperature_2m&timezone=Asia%2FDubai");
-    const value = payload.current?.temperature_2m;
-    state.weather = Number.isFinite(value) ? Math.round(value) : null;
-  } catch {
-    state.weather = null;
-  }
-  renderAbuDhabiWeather();
+function looksLikeDateValue(value) {
+  const text = String(value || "").trim();
+  return /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(text) ||
+    /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(text) ||
+    /^\d{1,2}\s+[A-Za-z]{3,}\s+\d{2,4}$/.test(text);
 }
 
-function requestJson(url) {
-  if (typeof fetch === "function") {
-    return fetch(url).then((response) => {
-      if (!response.ok) throw new Error("Weather unavailable");
-      return response.json();
-    });
-  }
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open("GET", url, true);
-    request.onload = () => {
-      if (request.status < 200 || request.status >= 300) {
-        reject(new Error("Weather unavailable"));
-        return;
-      }
-      try {
-        resolve(JSON.parse(request.responseText));
-      } catch (error) {
-        reject(error);
-      }
-    };
-    request.onerror = () => reject(new Error("Weather unavailable"));
-    request.send();
-  });
-}
-
-function renderAbuDhabiWeather() {
-  $("#abuDhabiWeather").textContent = state.weather === null ? "--°C" : `${state.weather}°C`;
-}
-
-function departmentGroup(value = "") {
-  const text = String(value).toLowerCase();
-  if (text.includes("procurement")) return "Procurement";
-  if (text.includes("finance")) return "Finance";
-  if (text.includes("p&c") || text.includes("admin") || text.includes("culture")) return "P&C";
-  return "Operations";
+function looksLikeNameValue(value) {
+  const text = String(value || "").trim();
+  return Boolean(text) && text.length >= 3 && !looksLikeDateValue(text) && /[A-Za-z]/.test(text);
 }
 
 async function signIn(email, password) {
@@ -198,18 +120,12 @@ async function signIn(email, password) {
 }
 
 async function verifyPortalAccess() {
-
   const email = normalizedEmail();
   if (!email) throw new Error("Unable to identify the signed-in account.");
   const { data, error } = await client
     .from("admin_portal_users")
     .select("email,role,is_active")
     .eq("email", email)
-
-  const { data, error } = await client
-    .from("admin_portal_users")
-    .select("role,is_active")
-
     .eq("is_active", true)
     .maybeSingle();
   if (error) throw new Error("Your login worked, but the administration access rule is not ready yet.");
@@ -238,7 +154,6 @@ async function deleteRow(table, id) {
 }
 
 async function clearTable(table) {
-
   const batchSize = 250;
   for (;;) {
     const { data, error } = await client.from(table).select("id").order("id", { ascending: true }).limit(batchSize);
@@ -249,10 +164,6 @@ async function clearTable(table) {
     if (deleteError) throw deleteError;
     if (ids.length < batchSize) break;
   }
-
-  const { error } = await client.from(table).delete().not("id", "is", null);
-  if (error) throw error;
-
 }
 
 function renderShell() {
@@ -260,25 +171,13 @@ function renderShell() {
   $("#appView").hidden = !state.session;
   if (!state.session) return;
 
-  const displayName = displayNameForEmail(state.session.user?.email);
-  $("#roleLabel").textContent = displayName;
-  $("#accessLabel").textContent = "Team Member";
-  $("#accessLabel").classList.remove("super-user-badge", "viewer-badge");
+  const email = state.session.user?.email || "Admin";
+  $("#roleLabel").textContent = `${displayNameForEmail(email)} · secure workspace`;
   $("#navList").innerHTML = pages.map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
     </button>`
   )).join("");
-}
-
-function setTopActions() {
-  $(".topbar").classList.add("dashboard-topbar");
-  $(".table-search").hidden = true;
-  $("#dashboardMeta").hidden = false;
-  $("#refreshButton").textContent = "Sign out";
-  $("#refreshButton").dataset.action = "signout";
-  updateAbuDhabiTime();
-  renderAbuDhabiWeather();
 }
 
 function metric(label, value) {
@@ -289,23 +188,22 @@ function renderDashboard() {
   $("#dashboard").hidden = false;
   $("#tablePage").hidden = true;
   $("#pageTitle").textContent = "Dashboard";
-  setTopActions("dashboard");
 
   const employeeCount = (state.rows.employees || []).length;
   const recruitmentOpen = (state.rows.recruitment || []).filter((row) => !["Joined", "Rejected"].includes(row.status)).length;
   const documentsDue = (state.rows.documents || []).filter((row) => row.status !== "Valid").length;
-  const utilityBillCount = (state.rows.utilities || []).length;
+  const vendorCount = (state.rows.vendors || []).length;
 
   $("#dashboard").innerHTML = `
     <div class="summary-grid">
       ${metric("Employees", employeeCount)}
       ${metric("Open Recruitment", recruitmentOpen)}
       ${metric("Document Alerts", documentsDue)}
-      ${metric("Utility Bills", utilityBillCount)}
+      ${metric("Vendors", vendorCount)}
     </div>
     <div class="glass empty-state">
       <h3>Citi Homes Administration</h3>
-      <p>Manage Operations, P&C and Administration, Procurement, recruitment, attendance, pantry, utility bills and office controls from one clean dashboard.</p>
+      <p>Manage Operations, P&C and Administration, Procurement, recruitment, attendance, pantry, vendors and office controls from one clean dashboard.</p>
     </div>
   `;
 }
@@ -324,7 +222,6 @@ function renderTablePage(page) {
   $("#dashboard").hidden = true;
   $("#tablePage").hidden = false;
   $("#pageTitle").textContent = page.label;
-  setTopActions("table");
 
   const rows = filteredRows(page);
   $("#summaryCards").innerHTML = `
@@ -336,23 +233,16 @@ function renderTablePage(page) {
   const filterTools = page.filters ? page.filters.map((item) => (
     `<button class="pill ${state.activeFilter === item ? "active" : ""}" data-filter="${item}">${item}</button>`
   )).join("") : "";
-  const importTools = page.table === "recruitment" && canEdit()
-
+  const recruitmentTools = page.table === "recruitment" && canEdit()
     ? `<button type="button" class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
        <button type="button" class="pill" data-export="recruitment">Export Recruitment Data</button>
        <button type="button" class="pill import-template-button" data-recruitment-template>Import Data Template</button>
        <button type="button" class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
-
-    ? `<button class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
-       <button class="pill import-template-button" data-recruitment-template>Import Data Template</button>
-       <button class="pill" data-export="recruitment">Export Candidates CSV</button>
-       <button class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
-
        <input id="recruitmentImportFile" type="file" accept=".csv,.xlsx,.xls" hidden>`
     : "";
-  $("#pageTools").innerHTML = filterTools || importTools
-    ? `${filterTools}${importTools}`
-    : isViewer() ? `<span class="viewer-notice">View only mode</span>` : "";
+  $("#pageTools").innerHTML = filterTools || recruitmentTools
+    ? `${filterTools}${recruitmentTools}`
+    : (!canEdit() ? `<span class="viewer-notice">View only mode</span>` : "");
 
   renderTable(page, rows);
   renderForm(page);
@@ -361,7 +251,6 @@ function renderTablePage(page) {
 function renderTable(page, rows) {
   const table = $("#dataTable");
   const cols = columns[page.table] || [];
-  table.className = page.table === "recruitment" ? "data-table compact-table recruitment-table" : "data-table";
   if (!rows.length) {
     table.innerHTML = `<tbody><tr><td class="empty-state">No records found.</td></tr></tbody>`;
     return;
@@ -372,17 +261,10 @@ function renderTable(page, rows) {
       ${rows.map((row, index) => `
         <tr data-id="${row.id || ""}">
           <td>${index + 1}</td>
-
           ${cols.map((col) => `<td>${fieldControl(col, col === "candidate" ? displayCandidateValue(row) : (row[col] ?? ""))}</td>`).join("")}
           <td class="row-actions">
             ${canEdit()
               ? `${saveButtonMarkup(page.table, row.id)}<button type="button" class="danger" data-delete="${row.id}">Delete</button>`
-
-          ${cols.map((col) => `<td>${fieldControl(col, row[col] ?? "")}</td>`).join("")}
-          <td class="row-actions">
-            ${canEdit()
-              ? `${saveButtonMarkup(page.table, row.id)}<button class="danger" data-delete="${row.id}">Delete</button>`
-
               : `<span class="view-only-pill">View only</span>`}
           </td>
         </tr>
@@ -393,64 +275,65 @@ function renderTable(page, rows) {
 
 function saveButtonMarkup(table, id) {
   const saved = state.savedRows.has(`${table}:${id}`);
-
   return `<button type="button" class="save-button ${saved ? "saved" : ""}" data-save="${id}" aria-label="${saved ? "Saved" : "Save record"}">${saved ? "✓" : "Save"}</button>`;
-
-  return `<button class="save-button ${saved ? "saved" : ""}" data-save="${id}" aria-label="${saved ? "Saved" : "Save record"}">${saved ? "✓" : "Save"}</button>`;
-
 }
 
-function fieldControl(column, value) {
-  const safeValue = String(value).replaceAll('"', "&quot;");
-  const disabled = canEdit() ? "" : " disabled";
-
-  if (column === "candidate") {
-    return `<input data-field="${column}" type="text" value="${safeValue}"${disabled}>`;
-  }
-
-
-  if (options[column]) {
-    return `<select data-field="${column}"${disabled}>${options[column].map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
-  }
-  const type = column.includes("date") || column.includes("expiry") || column.includes("renewal") ? "date" : "text";
-  return `<input data-field="${column}" type="${type}" value="${safeValue}"${disabled}>`;
+function safeCandidateValue(value) {
+  return looksLikeNameValue(value) ? value : "";
 }
-
 
 function displayCandidateValue(row) {
   const candidate = row?.candidate;
   if (looksLikeNameValue(candidate)) return candidate;
-  const fallback = fallbackCandidateFromRow(Object.values(row || {}));
+  const fallback = fallbackCandidateFromRow(row);
   return fallback || (candidate ?? "");
 }
 
-function safeRecruitmentCandidate(value) {
-  return looksLikeNameValue(value) ? value : "";
+function fallbackCandidateFromRow(row) {
+  let fallback = "";
+  let bestScore = -Infinity;
+  Object.values(row || {}).forEach((value) => {
+    const text = String(value || "").trim();
+    if (!looksLikeNameValue(text)) return;
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const score = text.length + (words * 4) + (/\s/.test(text) ? 3 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      fallback = text;
+    }
+  });
+  return fallback;
 }
 
-
+function fieldControl(column, value) {
+  const safeValue = String(value).replaceAll('"', "&quot;");
+  if (column === "candidate") {
+    return `<input data-field="${column}" type="text" value="${safeValue}">`;
+  }
+  if (options[column]) {
+    return `<select data-field="${column}">${options[column].map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
+  }
+  const type = column.includes("date") || column.includes("expiry") || column.includes("renewal") ? "date" : "text";
+  return `<input data-field="${column}" type="${type}" value="${safeValue}">`;
+}
 
 function renderForm(page) {
   const cols = columns[page.table] || [];
   $("#addRecordPanel").open = false;
-  $("#addRecordPanel").hidden = isViewer();
+  if (page.table === "recruitment") {
+    $("#addRecordPanel").hidden = false;
+  }
   if (isViewer()) {
     $("#recordForm").innerHTML = "";
+    $("#addRecordPanel").hidden = true;
     return;
   }
-  $("#addRecordPanel").hidden = false;
-
   const templateButton = page.table === "recruitment"
     ? `<button type="button" class="pill import-template-button" data-recruitment-template>Import Data Template</button>`
     : "";
   $("#recordForm").innerHTML = `${templateButton}${cols.map((col) => (
     `<label>${titleize(col)}${fieldControl(col, col === "department" ? "Operations" : "")}</label>`
   )).join("")}<button type="submit">Add Record</button>`;
-
-  $("#recordForm").innerHTML = cols.map((col) => (
-    `<label>${titleize(col)}${fieldControl(col, col === "department" ? "Operations" : "")}</label>`
-  )).join("") + `<button type="submit">Add Record</button>`;
-
 }
 
 async function loadPageData() {
@@ -458,23 +341,6 @@ async function loadPageData() {
   await Promise.all(tables.map(async (table) => {
     state.rows[table] = await fetchRows(table);
   }));
-}
-
-async function loadTables(tables, options = {}) {
-  const uniqueTables = [...new Set(tables)];
-  await Promise.all(uniqueTables.map(async (table) => {
-    if (!options.force && state.rows[table]) return;
-    state.rows[table] = await fetchRows(table);
-  }));
-}
-
-async function loadDashboardData(options = {}) {
-  await loadTables(dashboardTables, options);
-}
-
-async function ensurePageData(page, options = {}) {
-  if (!page.table) return;
-  await loadTables([page.table], options);
 }
 
 async function showPage(key) {
@@ -485,13 +351,8 @@ async function showPage(key) {
   }
   state.page = page.key;
   renderShell();
-  if (page.key === "dashboard") {
-    await loadDashboardData();
-    renderDashboard();
-  } else {
-    await ensurePageData(page);
-    renderTablePage(page);
-  }
+  if (page.key === "dashboard") renderDashboard();
+  else renderTablePage(page);
 }
 
 function rowFromElement(rowElement) {
@@ -501,248 +362,13 @@ function rowFromElement(rowElement) {
     const value = input.value.trim();
     if (value !== "") row[input.dataset.field] = value;
   });
-
   if (row.candidate && !looksLikeNameValue(row.candidate)) delete row.candidate;
-
-
   return row;
 }
 
-function normalizeHeader(value) {
-  return String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
-}
-
-function cleanImportValue(table, column, value) {
-  const text = String(value || "").trim();
-  if (!numericImportColumns[table]?.has(column)) return text;
-  const normalized = text.replaceAll(",", "");
-  const match = normalized.match(/-?\d+(?:\.\d+)?/);
-  return match ? match[0] : "";
-}
-
-
-function looksLikeDateValue(value) {
-  const text = String(value || "").trim();
-  return /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(text) ||
-    /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(text) ||
-    /^\d{1,2}\s+[A-Za-z]{3,}\s+\d{2,4}$/.test(text);
-}
-
-function looksLikeNameValue(value) {
-  const text = String(value || "").trim();
-  return Boolean(text) &&
-    text.length >= 3 &&
-    !looksLikeDateValue(text) &&
-    /[A-Za-z]/.test(text) &&
-    !/^(candidate|name|applicant)$/i.test(text);
-}
-
-function fallbackCandidateFromRow(rawRow, skipIndexes = new Set()) {
-  let fallback = "";
-  let bestScore = -Infinity;
-  (rawRow || []).forEach((value, index) => {
-    if (skipIndexes.has(index)) return;
-    const text = String(value || "").trim();
-    if (!looksLikeNameValue(text)) return;
-    const words = text.split(/\s+/).filter(Boolean).length;
-    const score = text.length + (words * 4) + (/\s/.test(text) ? 3 : 0) + (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+$/.test(text) ? 5 : 0);
-    if (score > bestScore) {
-      bestScore = score;
-      fallback = text;
-    }
-  });
-  return fallback;
-}
-
-function headerLabelsFor(table, column) {
-  return [column, titleize(column), ...((importAliases[table] || {})[column] || [])].map(normalizeHeader);
-}
-
-function headerScore(table, header) {
-  const tableColumns = columns[table] || [];
-  return tableColumns.reduce((score, column) => {
-    const labels = headerLabelsFor(table, column);
-    const found = labels.some((label) => header.includes(label));
-    if (!found) return score;
-    return score + (["candidate", "position"].includes(column) ? 3 : 1);
-  }, 0);
-}
-
-function findImportHeader(table, rawRows) {
-  const candidates = rawRows.slice(0, 10).map((row, index) => ({
-    index,
-    header: (row || []).map(normalizeHeader)
-  }));
-  return candidates
-    .map((item) => ({ ...item, score: headerScore(table, item.header) }))
-    .sort((a, b) => b.score - a.score)[0] || { index: 0, header: [] };
-}
-
-function columnIndexesFor(table, header) {
-  const used = new Set();
-  const tableColumns = columns[table] || [];
-  return Object.fromEntries(tableColumns.map((column) => {
-    const labels = headerLabelsFor(table, column);
-    const index = labels
-      .map((label) => header.indexOf(label))
-      .find((match) => match >= 0 && !used.has(match));
-    if (index !== undefined) used.add(index);
-    return [column, index];
-  }));
-}
-
-
-
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let cell = "";
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
-    if (char === '"' && quoted && next === '"') {
-      cell += '"';
-      index += 1;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === "," && !quoted) {
-      row.push(cell);
-      cell = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && next === "\n") index += 1;
-      row.push(cell);
-      if (row.some((value) => String(value).trim() !== "")) rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-  row.push(cell);
-  if (row.some((value) => String(value).trim() !== "")) rows.push(row);
-  return rows;
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) {
-      existing.addEventListener("load", resolve, { once: true });
-      existing.addEventListener("error", reject, { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
-
-async function ensureExcelLibrary() {
-  if (window.XLSX) return;
-  await loadScript("https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js");
-  if (!window.XLSX) throw new Error("Excel import library could not load. Please upload CSV or try again.");
-}
-
-async function readImportRows(file) {
-  if (file.name.toLowerCase().endsWith(".csv")) {
-    return parseCsv(await file.text());
-  }
-  await ensureExcelLibrary();
-  const buffer = await file.arrayBuffer();
-  const workbook = window.XLSX.read(buffer, { type: "array", cellDates: false });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
-}
-
-function mapImportRows(table, rawRows) {
-
-  const tableColumns = columns[table] || [];
-  const headerInfo = findImportHeader(table, rawRows);
-  const columnIndexes = columnIndexesFor(table, headerInfo.header);
-  const usedIndexes = new Set(Object.values(columnIndexes).filter((index) => index !== undefined && index !== null));
-  return rawRows.slice(headerInfo.index + 1).map((rawRow) => {
-    const row = {};
-    tableColumns.forEach((column) => {
-      const match = columnIndexes[column];
-
-  const aliases = importAliases[table] || {};
-  const tableColumns = columns[table] || [];
-  const header = (rawRows[0] || []).map(normalizeHeader);
-  return rawRows.slice(1).map((rawRow) => {
-    const row = {};
-    tableColumns.forEach((column) => {
-      const match = [column, titleize(column), ...(aliases[column] || [])].map(normalizeHeader)
-        .map((label) => header.indexOf(label))
-        .find((index) => index >= 0);
-
-      if (match === undefined) return;
-      const value = cleanImportValue(table, column, rawRow[match]);
-      if (value !== "") row[column] = value;
-    });
-
-    if (!looksLikeNameValue(row.candidate)) {
-      const fallback = fallbackCandidateFromRow(rawRow, usedIndexes);
-      if (fallback) row.candidate = fallback;
-      else delete row.candidate;
-    }
-    if (!row.status) row.status = "Applied";
-    return row;
-  }).filter((row) => Object.keys(row).some((key) => key !== "status") && looksLikeNameValue(row.candidate));
-
-    if (!row.status) row.status = "Applied";
-    return row;
-  }).filter((row) => Object.keys(row).some((key) => key !== "status") && row.candidate);
-
-}
-
-async function importTableFile(table, file) {
-  const rawRows = await readImportRows(file);
-  if (rawRows.length < 2) throw new Error("No import rows found.");
-  const rows = mapImportRows(table, rawRows);
-  if (!rows.length) throw new Error("No valid rows found. Please make sure the file has a Candidate column.");
-  const { error } = await client.from(table).insert(rows);
-  if (error) throw error;
-  return rows.length;
-}
-
-function csvCell(value) {
-  const text = String(value ?? "");
-  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-
 function downloadRecruitmentTemplate() {
-  const headers = [
-    "Candidate",
-    "Position",
-    "Source",
-    "Mobile",
-    "Location",
-    "GCC Experience",
-    "Total Experience",
-    "Current Salary",
-    "Expected Salary",
-    "Notice Period",
-    "Interview Date",
-    "Status"
-  ];
-  const sample = [
-    "Candidate Name",
-    "Position Applied",
-    "LinkedIn / Referral / Walk-in",
-    "05xxxxxxxx",
-    "Abu Dhabi",
-    "2 Years",
-    "5 Years",
-    "5000",
-    "7000",
-    "30 Days",
-    "2026-07-16",
-    "Applied"
-  ];
+  const headers = ["Candidate", "Position", "Source", "Mobile", "Location", "GCC Experience", "Total Experience", "Current Salary", "Expected Salary", "Notice Period", "Interview Date", "Status"];
+  const sample = ["Candidate Name", "Position Applied", "LinkedIn / Referral / Walk-in", "05xxxxxxxx", "Abu Dhabi", "2 Years", "5 Years", "5000", "7000", "30 Days", "2026-07-16", "Applied"];
   const lines = [headers, sample].map((row) => row.map(csvCell).join(","));
   const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
@@ -758,13 +384,7 @@ function downloadRecruitmentTemplate() {
 function exportTableCsv(table) {
   const tableColumns = columns[table] || [];
   const rows = [...(state.rows[table] || [])];
-
-function exportTableCsv(table) {
-  const page = pages.find((item) => item.table === table);
-  const tableColumns = columns[table] || [];
-  const rows = filteredRows(page);
-
-  if (!rows.length) throw new Error("No candidate records available to export.");
+  if (!rows.length) throw new Error("No recruitment records available to export.");
   const header = ["Sr. No", ...tableColumns.map(titleize)];
   const lines = [
     header.map(csvCell).join(","),
@@ -772,7 +392,6 @@ function exportTableCsv(table) {
   ];
   const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
-
   const href = URL.createObjectURL(blob);
   link.href = href;
   link.download = `${table}-data-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -780,14 +399,74 @@ function exportTableCsv(table) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
 
-  link.href = URL.createObjectURL(blob);
-  link.download = `recruitment-candidates-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(link.href);
+function normalizeHeader(value) {
+  return String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
 
+async function ensureExcelLibrary() {
+  if (window.XLSX) return;
+  const script = document.createElement("script");
+  script.src = "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js";
+  await new Promise((resolve, reject) => {
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function readImportRows(file) {
+  if (file.name.toLowerCase().endsWith(".csv")) {
+    const text = await file.text();
+    return text.split(/\r?\n/).filter(Boolean).map((line) => line.split(","));
+  }
+  await ensureExcelLibrary();
+  const buffer = await file.arrayBuffer();
+  const workbook = window.XLSX.read(buffer, { type: "array", cellDates: false });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+}
+
+function mapImportRows(table, rawRows) {
+  const cols = columns[table] || [];
+  const header = (rawRows[0] || []).map(normalizeHeader);
+  const aliases = {
+    candidate: ["candidate", "candidate name", "full name", "applicant", "applicant name"],
+    position: ["position", "job title", "role", "designation"],
+    source: ["source", "cv source", "recruitment source"],
+    mobile: ["mobile", "phone", "contact number"],
+    location: ["location", "city", "current location"],
+    gcc_experience: ["gcc experience", "gcc exp"],
+    total_experience: ["total experience", "experience"],
+    current_salary: ["current salary", "salary"],
+    expected_salary: ["expected salary", "expected"],
+    notice_period: ["notice period", "notice"],
+    interview_date: ["interview date", "date"],
+    status: ["status", "stage"]
+  };
+  return rawRows.slice(1).map((rawRow) => {
+    const row = {};
+    cols.forEach((column) => {
+      const labels = [column, titleize(column), ...(aliases[column] || [])].map(normalizeHeader);
+      const index = labels.map((label) => header.indexOf(label)).find((match) => match >= 0);
+      if (index === undefined) return;
+      const value = String(rawRow[index] || "").trim();
+      if (value !== "") row[column] = value;
+    });
+    if (!row.status) row.status = "Applied";
+    return row;
+  }).filter((row) => row.candidate && !looksLikeDateValue(row.candidate));
+}
+
+async function importTableFile(table, file) {
+  const rawRows = await readImportRows(file);
+  if (rawRows.length < 2) throw new Error("No import rows found.");
+  const rows = mapImportRows(table, rawRows);
+  if (!rows.length) throw new Error("No valid recruitment rows found.");
+  const { error } = await client.from(table).insert(rows);
+  if (error) throw error;
+  return rows.length;
 }
 
 document.addEventListener("click", async (event) => {
@@ -798,10 +477,7 @@ document.addEventListener("click", async (event) => {
   const importButton = event.target.closest("[data-import]");
   const exportButton = event.target.closest("[data-export]");
   const clearButton = event.target.closest("[data-clear-table]");
-
   const templateButton = event.target.closest("[data-recruitment-template]");
-
-
 
   try {
     if (pageButton) await showPage(pageButton.dataset.page);
@@ -809,42 +485,17 @@ document.addEventListener("click", async (event) => {
       state.activeFilter = filterButton.dataset.filter;
       await showPage(state.page);
     }
-    if ((saveButton || deleteButton || importButton || exportButton || clearButton) && !canEdit()) {
-      alert("This test profile is view-only.");
-      return;
-    }
-    if (importButton) {
-      $("#recruitmentImportFile")?.click();
-    }
-    if (exportButton) {
-      exportTableCsv(exportButton.dataset.export);
-    }
-
-    if (templateButton) {
-      downloadRecruitmentTemplate();
-    }
-
-
+    if (importButton) $("#recruitmentImportFile")?.click();
+    if (exportButton) exportTableCsv(exportButton.dataset.export);
+    if (templateButton) downloadRecruitmentTemplate();
     if (clearButton && confirm("This will delete all Recruitment Tracker records. Continue?")) {
-      clearButton.disabled = true;
-      clearButton.textContent = "Clearing...";
       await clearTable(clearButton.dataset.clearTable);
       state.rows[clearButton.dataset.clearTable] = await fetchRows(clearButton.dataset.clearTable);
       await showPage(state.page);
     }
     if (saveButton) {
       const page = pages.find((item) => item.key === state.page);
-      saveButton.disabled = true;
-      saveButton.classList.add("saving");
-      saveButton.textContent = "";
-      const savedRow = await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
-      await wait(650);
-      state.savedRows.add(`${page.table}:${savedRow.id}`);
-      saveButton.classList.remove("saving");
-      saveButton.classList.add("saved");
-      saveButton.textContent = "✓";
-      await wait(850);
-      state.savedRows.delete(`${page.table}:${savedRow.id}`);
+      await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
       state.rows[page.table] = await fetchRows(page.table);
       await showPage(state.page);
     }
@@ -864,7 +515,7 @@ $("#loginForm").addEventListener("submit", async (event) => {
   $("#loginMessage").textContent = "";
   try {
     state.session = await signIn($("#username").value, $("#password").value);
-    await loadDashboardData();
+    await loadPageData();
     renderShell();
     renderDashboard();
   } catch (error) {
@@ -872,50 +523,30 @@ $("#loginForm").addEventListener("submit", async (event) => {
   }
 });
 
-function setPasswordVisible(visible) {
-  const password = $("#password");
-  password.type = visible ? "text" : "password";
-  $("#passwordToggle").textContent = visible ? "Hide" : "Show";
-}
-
-["mousedown", "touchstart", "pointerdown"].forEach((eventName) => {
-  $("#passwordToggle").addEventListener(eventName, (event) => {
-    event.preventDefault();
-    setPasswordVisible(true);
-  });
-});
-
-["mouseup", "mouseleave", "blur", "touchend", "touchcancel", "pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
-  $("#passwordToggle").addEventListener(eventName, () => setPasswordVisible(false));
-});
-
 $("#logoutButton").addEventListener("click", async () => {
   if (client) await client.auth.signOut();
   state.session = null;
-  state.portalUser = null;
   state.rows = {};
   renderShell();
 });
 
 $("#refreshButton").addEventListener("click", async () => {
-  if ($("#refreshButton").dataset.action === "signout") {
-    if (client) await client.auth.signOut();
-    state.session = null;
-    state.portalUser = null;
-    state.rows = {};
-    renderShell();
-    return;
-  }
-  if (state.page === "dashboard") await loadDashboardData({ force: true });
-  else {
-    const page = pages.find((item) => item.key === state.page);
-    await ensurePageData(page, { force: true });
-  }
+  await loadPageData();
   await showPage(state.page);
 });
 
 $("#globalSearch").addEventListener("input", async (event) => {
   state.search = event.target.value;
+  await showPage(state.page);
+});
+
+$("#recordForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const page = pages.find((item) => item.key === state.page);
+  const row = rowFromElement(event.currentTarget);
+  await upsertRow(page.table, row);
+  state.rows[page.table] = await fetchRows(page.table);
+  event.currentTarget.reset();
   await showPage(state.page);
 });
 
@@ -928,24 +559,10 @@ document.addEventListener("change", async (event) => {
     event.target.value = "";
     state.rows.recruitment = await fetchRows("recruitment");
     await showPage("recruitment");
-    alert(`${count} recruitment records imported.`);
+    alert(`${count} recruitment record(s) imported.`);
   } catch (error) {
     alert(error.message || error);
   }
-});
-
-$("#recordForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!canEdit()) {
-    alert("This test profile is view-only.");
-    return;
-  }
-  const page = pages.find((item) => item.key === state.page);
-  const row = rowFromElement(event.currentTarget);
-  await upsertRow(page.table, row);
-  state.rows[page.table] = await fetchRows(page.table);
-  event.currentTarget.reset();
-  await showPage(state.page);
 });
 
 (async function boot() {
@@ -959,12 +576,7 @@ $("#recordForm").addEventListener("submit", async (event) => {
   renderShell();
   if (state.session) {
     state.portalUser = await verifyPortalAccess();
-    await loadDashboardData();
+    await loadPageData();
     await showPage(state.page);
   }
-  updateAbuDhabiTime();
-  setInterval(updateAbuDhabiTime, 30000);
-  loadAbuDhabiWeather();
-  setInterval(loadAbuDhabiWeather, 900000);
-})();
 })();
