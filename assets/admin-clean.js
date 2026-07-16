@@ -47,7 +47,11 @@ const options = {
 
 const importAliases = {
   recruitment: {
+
     candidate: ["candidate", "candidate name", "candidate full name", "candidate's name", "name of candidate", "name", "full name", "applicant", "applicant name", "applicant full name"],
+
+    candidate: ["candidate", "candidate name", "name", "applicant", "applicant name"],
+
     position: ["position", "job title", "role", "designation", "applied position"],
     source: ["source", "cv source", "recruitment source"],
     mobile: ["mobile", "phone", "contact", "contact number", "mobile number"],
@@ -57,7 +61,11 @@ const importAliases = {
     current_salary: ["current salary", "current_salary", "salary"],
     expected_salary: ["expected salary", "expected_salary", "expected"],
     notice_period: ["notice period", "notice_period", "notice"],
+
     interview_date: ["interview date", "interview_date", "interview scheduled date", "scheduled date"],
+
+    interview_date: ["interview date", "interview_date", "date"],
+
     status: ["status", "stage"]
   }
 };
@@ -190,12 +198,18 @@ async function signIn(email, password) {
 }
 
 async function verifyPortalAccess() {
+
   const email = normalizedEmail();
   if (!email) throw new Error("Unable to identify the signed-in account.");
   const { data, error } = await client
     .from("admin_portal_users")
     .select("email,role,is_active")
     .eq("email", email)
+
+  const { data, error } = await client
+    .from("admin_portal_users")
+    .select("role,is_active")
+
     .eq("is_active", true)
     .maybeSingle();
   if (error) throw new Error("Your login worked, but the administration access rule is not ready yet.");
@@ -224,6 +238,7 @@ async function deleteRow(table, id) {
 }
 
 async function clearTable(table) {
+
   const batchSize = 250;
   for (;;) {
     const { data, error } = await client.from(table).select("id").order("id", { ascending: true }).limit(batchSize);
@@ -234,6 +249,10 @@ async function clearTable(table) {
     if (deleteError) throw deleteError;
     if (ids.length < batchSize) break;
   }
+
+  const { error } = await client.from(table).delete().not("id", "is", null);
+  if (error) throw error;
+
 }
 
 function renderShell() {
@@ -318,10 +337,17 @@ function renderTablePage(page) {
     `<button class="pill ${state.activeFilter === item ? "active" : ""}" data-filter="${item}">${item}</button>`
   )).join("") : "";
   const importTools = page.table === "recruitment" && canEdit()
+
     ? `<button type="button" class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
        <button type="button" class="pill" data-export="recruitment">Export Recruitment Data</button>
        <button type="button" class="pill import-template-button" data-recruitment-template>Import Data Template</button>
        <button type="button" class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
+
+    ? `<button class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
+       <button class="pill import-template-button" data-recruitment-template>Import Data Template</button>
+       <button class="pill" data-export="recruitment">Export Candidates CSV</button>
+       <button class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
+
        <input id="recruitmentImportFile" type="file" accept=".csv,.xlsx,.xls" hidden>`
     : "";
   $("#pageTools").innerHTML = filterTools || importTools
@@ -346,10 +372,17 @@ function renderTable(page, rows) {
       ${rows.map((row, index) => `
         <tr data-id="${row.id || ""}">
           <td>${index + 1}</td>
+
           ${cols.map((col) => `<td>${fieldControl(col, col === "candidate" ? displayCandidateValue(row) : (row[col] ?? ""))}</td>`).join("")}
           <td class="row-actions">
             ${canEdit()
               ? `${saveButtonMarkup(page.table, row.id)}<button type="button" class="danger" data-delete="${row.id}">Delete</button>`
+
+          ${cols.map((col) => `<td>${fieldControl(col, row[col] ?? "")}</td>`).join("")}
+          <td class="row-actions">
+            ${canEdit()
+              ? `${saveButtonMarkup(page.table, row.id)}<button class="danger" data-delete="${row.id}">Delete</button>`
+
               : `<span class="view-only-pill">View only</span>`}
           </td>
         </tr>
@@ -360,21 +393,29 @@ function renderTable(page, rows) {
 
 function saveButtonMarkup(table, id) {
   const saved = state.savedRows.has(`${table}:${id}`);
+
   return `<button type="button" class="save-button ${saved ? "saved" : ""}" data-save="${id}" aria-label="${saved ? "Saved" : "Save record"}">${saved ? "✓" : "Save"}</button>`;
+
+  return `<button class="save-button ${saved ? "saved" : ""}" data-save="${id}" aria-label="${saved ? "Saved" : "Save record"}">${saved ? "✓" : "Save"}</button>`;
+
 }
 
 function fieldControl(column, value) {
   const safeValue = String(value).replaceAll('"', "&quot;");
   const disabled = canEdit() ? "" : " disabled";
+
   if (column === "candidate") {
     return `<input data-field="${column}" type="text" value="${safeValue}"${disabled}>`;
   }
+
+
   if (options[column]) {
     return `<select data-field="${column}"${disabled}>${options[column].map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
   }
   const type = column.includes("date") || column.includes("expiry") || column.includes("renewal") ? "date" : "text";
   return `<input data-field="${column}" type="${type}" value="${safeValue}"${disabled}>`;
 }
+
 
 function displayCandidateValue(row) {
   const candidate = row?.candidate;
@@ -387,6 +428,8 @@ function safeRecruitmentCandidate(value) {
   return looksLikeNameValue(value) ? value : "";
 }
 
+
+
 function renderForm(page) {
   const cols = columns[page.table] || [];
   $("#addRecordPanel").open = false;
@@ -396,12 +439,18 @@ function renderForm(page) {
     return;
   }
   $("#addRecordPanel").hidden = false;
+
   const templateButton = page.table === "recruitment"
     ? `<button type="button" class="pill import-template-button" data-recruitment-template>Import Data Template</button>`
     : "";
   $("#recordForm").innerHTML = `${templateButton}${cols.map((col) => (
     `<label>${titleize(col)}${fieldControl(col, col === "department" ? "Operations" : "")}</label>`
   )).join("")}<button type="submit">Add Record</button>`;
+
+  $("#recordForm").innerHTML = cols.map((col) => (
+    `<label>${titleize(col)}${fieldControl(col, col === "department" ? "Operations" : "")}</label>`
+  )).join("") + `<button type="submit">Add Record</button>`;
+
 }
 
 async function loadPageData() {
@@ -452,7 +501,10 @@ function rowFromElement(rowElement) {
     const value = input.value.trim();
     if (value !== "") row[input.dataset.field] = value;
   });
+
   if (row.candidate && !looksLikeNameValue(row.candidate)) delete row.candidate;
+
+
   return row;
 }
 
@@ -467,6 +519,7 @@ function cleanImportValue(table, column, value) {
   const match = normalized.match(/-?\d+(?:\.\d+)?/);
   return match ? match[0] : "";
 }
+
 
 function looksLikeDateValue(value) {
   const text = String(value || "").trim();
@@ -538,6 +591,8 @@ function columnIndexesFor(table, header) {
   }));
 }
 
+
+
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -603,6 +658,7 @@ async function readImportRows(file) {
 }
 
 function mapImportRows(table, rawRows) {
+
   const tableColumns = columns[table] || [];
   const headerInfo = findImportHeader(table, rawRows);
   const columnIndexes = columnIndexesFor(table, headerInfo.header);
@@ -611,10 +667,22 @@ function mapImportRows(table, rawRows) {
     const row = {};
     tableColumns.forEach((column) => {
       const match = columnIndexes[column];
+
+  const aliases = importAliases[table] || {};
+  const tableColumns = columns[table] || [];
+  const header = (rawRows[0] || []).map(normalizeHeader);
+  return rawRows.slice(1).map((rawRow) => {
+    const row = {};
+    tableColumns.forEach((column) => {
+      const match = [column, titleize(column), ...(aliases[column] || [])].map(normalizeHeader)
+        .map((label) => header.indexOf(label))
+        .find((index) => index >= 0);
+
       if (match === undefined) return;
       const value = cleanImportValue(table, column, rawRow[match]);
       if (value !== "") row[column] = value;
     });
+
     if (!looksLikeNameValue(row.candidate)) {
       const fallback = fallbackCandidateFromRow(rawRow, usedIndexes);
       if (fallback) row.candidate = fallback;
@@ -623,6 +691,11 @@ function mapImportRows(table, rawRows) {
     if (!row.status) row.status = "Applied";
     return row;
   }).filter((row) => Object.keys(row).some((key) => key !== "status") && looksLikeNameValue(row.candidate));
+
+    if (!row.status) row.status = "Applied";
+    return row;
+  }).filter((row) => Object.keys(row).some((key) => key !== "status") && row.candidate);
+
 }
 
 async function importTableFile(table, file) {
@@ -639,6 +712,7 @@ function csvCell(value) {
   const text = String(value ?? "");
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
+
 
 function downloadRecruitmentTemplate() {
   const headers = [
@@ -684,6 +758,12 @@ function downloadRecruitmentTemplate() {
 function exportTableCsv(table) {
   const tableColumns = columns[table] || [];
   const rows = [...(state.rows[table] || [])];
+
+function exportTableCsv(table) {
+  const page = pages.find((item) => item.table === table);
+  const tableColumns = columns[table] || [];
+  const rows = filteredRows(page);
+
   if (!rows.length) throw new Error("No candidate records available to export.");
   const header = ["Sr. No", ...tableColumns.map(titleize)];
   const lines = [
@@ -692,6 +772,7 @@ function exportTableCsv(table) {
   ];
   const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
+
   const href = URL.createObjectURL(blob);
   link.href = href;
   link.download = `${table}-data-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -699,6 +780,14 @@ function exportTableCsv(table) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(href), 1000);
+
+  link.href = URL.createObjectURL(blob);
+  link.download = `recruitment-candidates-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+
 }
 
 document.addEventListener("click", async (event) => {
@@ -709,7 +798,10 @@ document.addEventListener("click", async (event) => {
   const importButton = event.target.closest("[data-import]");
   const exportButton = event.target.closest("[data-export]");
   const clearButton = event.target.closest("[data-clear-table]");
+
   const templateButton = event.target.closest("[data-recruitment-template]");
+
+
 
   try {
     if (pageButton) await showPage(pageButton.dataset.page);
@@ -727,9 +819,12 @@ document.addEventListener("click", async (event) => {
     if (exportButton) {
       exportTableCsv(exportButton.dataset.export);
     }
+
     if (templateButton) {
       downloadRecruitmentTemplate();
     }
+
+
     if (clearButton && confirm("This will delete all Recruitment Tracker records. Continue?")) {
       clearButton.disabled = true;
       clearButton.textContent = "Clearing...";
