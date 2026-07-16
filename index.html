@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/admin.css?v=quicksand-liquid-tables-20260717">
+  <link rel="stylesheet" href="assets/admin.css?v=selected-action-feedback-20260717">
 </head>
 <body>
   <main id="loginView" class="login-shell">
@@ -99,6 +99,25 @@
         var button = document.getElementById("refreshButton");
         if (button && button.textContent.trim() !== "Logout") button.textContent = "Logout";
       }
+
+      function markActionButton(button) {
+        if (!button || button.classList.contains("action-working") || button.classList.contains("action-done")) return;
+        button.dataset.originalText = button.textContent.trim();
+        button.classList.add("action-working");
+        button.textContent = "";
+        window.setTimeout(function () {
+          button.classList.remove("action-working");
+          button.classList.add("action-done");
+          button.textContent = "✓";
+        }, 360);
+      }
+
+      document.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-save], [data-delete]");
+        if (!button) return;
+        markActionButton(button);
+      }, true);
+
       normalizeLogoutText();
       new MutationObserver(normalizeLogoutText).observe(document.body, { childList: true, subtree: true });
     })();
