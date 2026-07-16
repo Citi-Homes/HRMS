@@ -54,6 +54,7 @@ let state = {
 };
 
 const $ = (selector) => document.querySelector(selector);
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const displayNames = {
   "umer@citihomes.ae": "Umer Raza",
@@ -378,6 +379,7 @@ document.addEventListener("click", async (event) => {
       saveButton.classList.add("saving");
       saveButton.textContent = "";
       const savedRow = await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
+      await wait(650);
       state.savedRows.add(`${page.table}:${savedRow.id}`);
       saveButton.classList.remove("saving");
       saveButton.classList.add("saved");
