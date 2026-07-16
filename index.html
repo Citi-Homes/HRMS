@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/admin.css?v=password-view-hold-20260717">
+  <link rel="stylesheet" href="assets/admin.css?v=eye-brand-align-20260717">
 </head>
 <body>
   <main id="loginView" class="login-shell">
@@ -29,7 +29,7 @@
         <label>Password
           <span class="password-field">
             <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
-            <button id="passwordToggle" type="button" aria-label="Hold to show password">View</button>
+            <button id="passwordToggle" type="button" aria-label="Hold to show password">Eye</button>
           </span>
         </label>
         <button type="submit">Login</button>
@@ -106,7 +106,7 @@
         if (!input || !button || button.dataset.passwordReady === "true") return;
 
         button.dataset.passwordReady = "true";
-        button.textContent = "View";
+        button.textContent = "Eye";
         button.setAttribute("aria-label", "Hold to show password");
         button.setAttribute("title", "Hold to show password");
 
