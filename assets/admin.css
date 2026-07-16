@@ -1220,3 +1220,42 @@ td:nth-child(5) select {
     inset 0 -1px 0 rgba(0,0,0,0.22),
     0 14px 30px rgba(36,37,39,0.13) !important;
 }
+
+
+/* Password hold-to-view control */
+.password-field button,
+#passwordToggle {
+  display: inline-grid !important;
+  place-items: center !important;
+  min-width: 44px !important;
+  width: 44px !important;
+  height: 34px !important;
+  right: 0.55rem !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  color: #fffaf0 !important;
+  font-size: 0 !important;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.18), transparent 34%),
+    linear-gradient(135deg, rgba(36,37,39,0.92), rgba(83,107,82,0.86), rgba(185,154,95,0.78)) !important;
+  border: 1px solid rgba(255,255,255,0.46) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.28),
+    0 10px 22px rgba(36,37,39,0.14) !important;
+  opacity: 1 !important;
+  z-index: 2 !important;
+}
+
+.password-field button::before,
+#passwordToggle::before {
+  content: "View";
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.password-field button:active,
+#passwordToggle:active {
+  transform: translateY(-50%) scale(0.96) !important;
+  filter: brightness(1.08);
+}
