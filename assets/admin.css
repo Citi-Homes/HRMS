@@ -1350,3 +1350,111 @@ td:nth-child(5) select {
   border-color: #ffffff !important;
   background: rgba(255,255,255,0.16) !important;
 }
+
+
+/* Final correction: clean eye icon and CH brand lockup alignment */
+.login-brand {
+  display: grid !important;
+  grid-template-columns: 78px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  min-height: 150px !important;
+  max-width: 100% !important;
+}
+
+.login-brand .brand-mark {
+  width: 78px !important;
+  height: 150px !important;
+  min-height: 150px !important;
+  align-self: center !important;
+  border-radius: 34px !important;
+}
+
+.login-title-stack {
+  height: 150px !important;
+  min-height: 150px !important;
+  display: grid !important;
+  grid-template-rows: 1fr auto !important;
+  align-content: stretch !important;
+  justify-content: start !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.login-brand h1 {
+  align-self: end !important;
+  margin: 0 0 0.2rem 0 !important;
+  font-size: clamp(3rem, 5.5vw, 3.45rem) !important;
+  line-height: 0.9 !important;
+  letter-spacing: -0.04em !important;
+  white-space: nowrap !important;
+  transform: translateX(-0.04em) !important;
+}
+
+.login-subtitle {
+  align-self: start !important;
+  margin: 0 !important;
+  font-size: clamp(1.02rem, 2.1vw, 1.18rem) !important;
+  line-height: 1.02 !important;
+  letter-spacing: 0.02em !important;
+  white-space: nowrap !important;
+}
+
+.password-field button,
+#passwordToggle {
+  width: 42px !important;
+  min-width: 42px !important;
+  height: 34px !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.password-field button::before,
+#passwordToggle::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 21px !important;
+  height: 13px !important;
+  transform: translate(-50%, -50%) !important;
+  border: 2px solid #fffaf0 !important;
+  border-radius: 50% / 58% !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.password-field button::after,
+#passwordToggle::after {
+  content: "" !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 7px !important;
+  height: 7px !important;
+  transform: translate(-50%, -50%) !important;
+  border-radius: 999px !important;
+  background: #fffaf0 !important;
+  box-shadow: 0 0 0 1px rgba(36,37,39,0.28) !important;
+}
+
+.password-field button.password-visible::before,
+#passwordToggle.password-visible::before,
+.password-field button:active::before,
+#passwordToggle:active::before {
+  width: 23px !important;
+  height: 14px !important;
+  border-color: #ffffff !important;
+  background: rgba(255,255,255,0.08) !important;
+}
+
+.password-field button.password-visible::after,
+#passwordToggle.password-visible::after,
+.password-field button:active::after,
+#passwordToggle:active::after {
+  width: 8px !important;
+  height: 8px !important;
+  background: #ffffff !important;
+}
