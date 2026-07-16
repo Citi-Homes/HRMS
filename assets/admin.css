@@ -505,7 +505,7 @@ h1 {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -543,6 +543,25 @@ h1 {
   background: var(--green);
 }
 
+.import-button {
+  color: #fff;
+  background: linear-gradient(135deg, var(--green), var(--gold));
+  border-color: rgba(255,255,255,0.5);
+}
+
+.import-template-button {
+  margin-top: 0.9rem;
+  color: #fff;
+  background: linear-gradient(135deg, var(--green), var(--gold));
+  border-color: rgba(255,255,255,0.5);
+}
+
+.danger-outline {
+  color: var(--red);
+  background: rgba(255,255,255,0.74);
+  border-color: rgba(179, 63, 48, 0.26);
+}
+
 .table-wrap {
   overflow: auto;
   border-radius: var(--radius);
@@ -552,6 +571,11 @@ table {
   width: 100%;
   border-collapse: collapse;
   min-width: 900px;
+}
+
+.compact-table {
+  min-width: 100%;
+  table-layout: fixed;
 }
 
 th, td {
@@ -579,6 +603,70 @@ td input, td select {
   border-radius: 10px;
 }
 
+.compact-table th,
+.compact-table td {
+  padding: 0.48rem 0.38rem;
+  font-size: 0.76rem;
+}
+
+.compact-table th {
+  font-size: 0.66rem;
+  letter-spacing: 0.045em;
+}
+
+.recruitment-table th {
+  position: static;
+  white-space: normal;
+  line-height: 1.15;
+  vertical-align: middle;
+}
+
+.recruitment-table td {
+  vertical-align: middle;
+}
+
+.compact-table td input,
+.compact-table td select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.42rem 0.42rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+}
+
+.recruitment-table th:first-child,
+.recruitment-table td:first-child {
+  width: 54px;
+}
+
+.recruitment-table th:nth-child(2),
+.recruitment-table td:nth-child(2),
+.recruitment-table th:nth-child(3),
+.recruitment-table td:nth-child(3) {
+  width: 11%;
+}
+
+.recruitment-table th:nth-child(5),
+.recruitment-table td:nth-child(5),
+.recruitment-table th:nth-child(12),
+.recruitment-table td:nth-child(12) {
+  width: 8%;
+}
+
+.recruitment-table th:last-child,
+.recruitment-table td:last-child {
+  width: 92px;
+}
+
+.compact-table .row-actions {
+  gap: 0.25rem;
+}
+
+.compact-table .row-actions button {
+  padding: 0.38rem 0.5rem;
+  font-size: 0.68rem;
+}
+
 .row-actions {
   display: flex;
   gap: 0.45rem;
@@ -587,6 +675,50 @@ td input, td select {
 .row-actions button {
   padding: 0.48rem 0.72rem;
   font-size: 0.78rem;
+}
+
+.row-actions .save-button {
+  min-width: 58px;
+  height: 34px;
+  justify-content: center;
+  overflow: hidden;
+  transition: width 0.18s ease, min-width 0.18s ease, border-radius 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.row-actions .save-button.saving,
+.row-actions .save-button.saved {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.row-actions .save-button.saving {
+  color: transparent;
+  pointer-events: none;
+}
+
+.row-actions .save-button.saving::after {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.48);
+  border-top-color: #fff;
+  animation: save-spin 0.7s linear infinite;
+}
+
+.row-actions .save-button.saved {
+  background: linear-gradient(135deg, var(--green), var(--gold));
+  color: #fff;
+  font-size: 0.95rem;
+  line-height: 1;
+  box-shadow: 0 12px 24px rgba(95, 81, 48, 0.24);
+  pointer-events: none;
+}
+
+@keyframes save-spin {
+  to { transform: rotate(360deg); }
 }
 
 .view-only-pill,

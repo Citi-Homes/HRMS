@@ -6,7 +6,7 @@
   <title>Citi Homes Administration</title>
   <meta name="description" content="Citi Homes P&C Administration System">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="assets/admin.css?v=glass-login-fields-20260715">
+  <link rel="stylesheet" href="assets/admin.css?v=recruitment-template-20260716">
 </head>
 <body>
   <main id="loginView" class="login-shell">
@@ -19,13 +19,13 @@
         </div>
       </div>
       <p class="login-copy">Source management dashboard for Operations, P&C and Administration, Recruitment, Attendance, Procurement and administration control.</p>
-      <form id="loginForm" class="login-form">
+      <form id="loginForm" class="login-form" method="post" action="javascript:void(0)">
         <label>Email
-          <input id="username" name="email" type="email" autocomplete="username" placeholder="admin@citihomes.ae" required>
+          <input id="username" type="email" autocomplete="username" placeholder="admin@citihomes.ae" required>
         </label>
         <label>Password
           <span class="password-field">
-            <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Password" required>
+            <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
             <button id="passwordToggle" type="button" aria-label="Hold to show password">Show</button>
           </span>
         </label>
@@ -85,7 +85,9 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/supabase-config.js?v=super-user-20260715"></script>
-  <script src="assets/admin.js?v=unified-header-20260715"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="assets/supabase-config.js?v=recruitment-fixes-20260716"></script>
+  <script src="assets/admin-clean.js?v=recruitment-fixes-20260716"></script>
+  <script src="assets/recruitment-tools.js?v=recruitment-fixes-20260716"></script>
 </body>
 </html>

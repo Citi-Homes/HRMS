@@ -1,3 +1,4 @@
+(() => {
 sanitizeLoginUrl();
 
 const config = window.CITI_HOMES_SUPABASE || {};
@@ -46,7 +47,7 @@ const options = {
 
 const importAliases = {
   recruitment: {
-    candidate: ["candidate", "candidate name", "name", "applicant", "applicant name"],
+    candidate: ["candidate", "candidate name", "candidate full name", "candidate's name", "name of candidate", "name", "full name", "applicant", "applicant name", "applicant full name"],
     position: ["position", "job title", "role", "designation", "applied position"],
     source: ["source", "cv source", "recruitment source"],
     mobile: ["mobile", "phone", "contact", "contact number", "mobile number"],
@@ -56,9 +57,13 @@ const importAliases = {
     current_salary: ["current salary", "current_salary", "salary"],
     expected_salary: ["expected salary", "expected_salary", "expected"],
     notice_period: ["notice period", "notice_period", "notice"],
-    interview_date: ["interview date", "interview_date", "date"],
+    interview_date: ["interview date", "interview_date", "interview scheduled date", "scheduled date"],
     status: ["status", "stage"]
   }
+};
+
+const numericImportColumns = {
+  recruitment: new Set(["gcc_experience", "total_experience", "current_salary", "expected_salary"])
 };
 
 let state = {
@@ -90,6 +95,7 @@ const displayNames = {
 
 const superUserEmails = new Set(["umer@citihomes.ae"]);
 const viewerEmails = new Set(["test@citihomes.ae"]);
+const dashboardTables = ["employees", "recruitment", "documents", "utilities"];
 
 function titleize(value) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -184,9 +190,12 @@ async function signIn(email, password) {
 }
 
 async function verifyPortalAccess() {
+  const email = normalizedEmail();
+  if (!email) throw new Error("Unable to identify the signed-in account.");
   const { data, error } = await client
     .from("admin_portal_users")
-    .select("role,is_active")
+    .select("email,role,is_active")
+    .eq("email", email)
     .eq("is_active", true)
     .maybeSingle();
   if (error) throw new Error("Your login worked, but the administration access rule is not ready yet.");
@@ -215,8 +224,16 @@ async function deleteRow(table, id) {
 }
 
 async function clearTable(table) {
-  const { error } = await client.from(table).delete().not("id", "is", null);
-  if (error) throw error;
+  const batchSize = 250;
+  for (;;) {
+    const { data, error } = await client.from(table).select("id").order("id", { ascending: true }).limit(batchSize);
+    if (error) throw error;
+    const ids = (data || []).map((row) => row.id).filter((id) => id !== null && id !== undefined);
+    if (!ids.length) break;
+    const { error: deleteError } = await client.from(table).delete().in("id", ids);
+    if (deleteError) throw deleteError;
+    if (ids.length < batchSize) break;
+  }
 }
 
 function renderShell() {
@@ -301,8 +318,10 @@ function renderTablePage(page) {
     `<button class="pill ${state.activeFilter === item ? "active" : ""}" data-filter="${item}">${item}</button>`
   )).join("") : "";
   const importTools = page.table === "recruitment" && canEdit()
-    ? `<button class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
-       <button class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
+    ? `<button type="button" class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
+       <button type="button" class="pill" data-export="recruitment">Export Recruitment Data</button>
+       <button type="button" class="pill import-template-button" data-recruitment-template>Import Data Template</button>
+       <button type="button" class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
        <input id="recruitmentImportFile" type="file" accept=".csv,.xlsx,.xls" hidden>`
     : "";
   $("#pageTools").innerHTML = filterTools || importTools
@@ -327,10 +346,10 @@ function renderTable(page, rows) {
       ${rows.map((row, index) => `
         <tr data-id="${row.id || ""}">
           <td>${index + 1}</td>
-          ${cols.map((col) => `<td>${fieldControl(col, row[col] ?? "")}</td>`).join("")}
+          ${cols.map((col) => `<td>${fieldControl(col, col === "candidate" ? displayCandidateValue(row) : (row[col] ?? ""))}</td>`).join("")}
           <td class="row-actions">
             ${canEdit()
-              ? `${saveButtonMarkup(page.table, row.id)}<button class="danger" data-delete="${row.id}">Delete</button>`
+              ? `${saveButtonMarkup(page.table, row.id)}<button type="button" class="danger" data-delete="${row.id}">Delete</button>`
               : `<span class="view-only-pill">View only</span>`}
           </td>
         </tr>
@@ -341,17 +360,31 @@ function renderTable(page, rows) {
 
 function saveButtonMarkup(table, id) {
   const saved = state.savedRows.has(`${table}:${id}`);
-  return `<button class="save-button ${saved ? "saved" : ""}" data-save="${id}" aria-label="${saved ? "Saved" : "Save record"}">${saved ? "✓" : "Save"}</button>`;
+  return `<button type="button" class="save-button ${saved ? "saved" : ""}" data-save="${id}" aria-label="${saved ? "Saved" : "Save record"}">${saved ? "✓" : "Save"}</button>`;
 }
 
 function fieldControl(column, value) {
   const safeValue = String(value).replaceAll('"', "&quot;");
   const disabled = canEdit() ? "" : " disabled";
+  if (column === "candidate") {
+    return `<input data-field="${column}" type="text" value="${safeValue}"${disabled}>`;
+  }
   if (options[column]) {
     return `<select data-field="${column}"${disabled}>${options[column].map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
   }
   const type = column.includes("date") || column.includes("expiry") || column.includes("renewal") ? "date" : "text";
   return `<input data-field="${column}" type="${type}" value="${safeValue}"${disabled}>`;
+}
+
+function displayCandidateValue(row) {
+  const candidate = row?.candidate;
+  if (looksLikeNameValue(candidate)) return candidate;
+  const fallback = fallbackCandidateFromRow(Object.values(row || {}));
+  return fallback || (candidate ?? "");
+}
+
+function safeRecruitmentCandidate(value) {
+  return looksLikeNameValue(value) ? value : "";
 }
 
 function renderForm(page) {
@@ -363,9 +396,12 @@ function renderForm(page) {
     return;
   }
   $("#addRecordPanel").hidden = false;
-  $("#recordForm").innerHTML = cols.map((col) => (
+  const templateButton = page.table === "recruitment"
+    ? `<button type="button" class="pill import-template-button" data-recruitment-template>Import Data Template</button>`
+    : "";
+  $("#recordForm").innerHTML = `${templateButton}${cols.map((col) => (
     `<label>${titleize(col)}${fieldControl(col, col === "department" ? "Operations" : "")}</label>`
-  )).join("") + `<button type="submit">Add Record</button>`;
+  )).join("")}<button type="submit">Add Record</button>`;
 }
 
 async function loadPageData() {
@@ -373,6 +409,23 @@ async function loadPageData() {
   await Promise.all(tables.map(async (table) => {
     state.rows[table] = await fetchRows(table);
   }));
+}
+
+async function loadTables(tables, options = {}) {
+  const uniqueTables = [...new Set(tables)];
+  await Promise.all(uniqueTables.map(async (table) => {
+    if (!options.force && state.rows[table]) return;
+    state.rows[table] = await fetchRows(table);
+  }));
+}
+
+async function loadDashboardData(options = {}) {
+  await loadTables(dashboardTables, options);
+}
+
+async function ensurePageData(page, options = {}) {
+  if (!page.table) return;
+  await loadTables([page.table], options);
 }
 
 async function showPage(key) {
@@ -383,8 +436,13 @@ async function showPage(key) {
   }
   state.page = page.key;
   renderShell();
-  if (page.key === "dashboard") renderDashboard();
-  else renderTablePage(page);
+  if (page.key === "dashboard") {
+    await loadDashboardData();
+    renderDashboard();
+  } else {
+    await ensurePageData(page);
+    renderTablePage(page);
+  }
 }
 
 function rowFromElement(rowElement) {
@@ -394,11 +452,90 @@ function rowFromElement(rowElement) {
     const value = input.value.trim();
     if (value !== "") row[input.dataset.field] = value;
   });
+  if (row.candidate && !looksLikeNameValue(row.candidate)) delete row.candidate;
   return row;
 }
 
 function normalizeHeader(value) {
   return String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+function cleanImportValue(table, column, value) {
+  const text = String(value || "").trim();
+  if (!numericImportColumns[table]?.has(column)) return text;
+  const normalized = text.replaceAll(",", "");
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  return match ? match[0] : "";
+}
+
+function looksLikeDateValue(value) {
+  const text = String(value || "").trim();
+  return /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(text) ||
+    /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(text) ||
+    /^\d{1,2}\s+[A-Za-z]{3,}\s+\d{2,4}$/.test(text);
+}
+
+function looksLikeNameValue(value) {
+  const text = String(value || "").trim();
+  return Boolean(text) &&
+    text.length >= 3 &&
+    !looksLikeDateValue(text) &&
+    /[A-Za-z]/.test(text) &&
+    !/^(candidate|name|applicant)$/i.test(text);
+}
+
+function fallbackCandidateFromRow(rawRow, skipIndexes = new Set()) {
+  let fallback = "";
+  let bestScore = -Infinity;
+  (rawRow || []).forEach((value, index) => {
+    if (skipIndexes.has(index)) return;
+    const text = String(value || "").trim();
+    if (!looksLikeNameValue(text)) return;
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const score = text.length + (words * 4) + (/\s/.test(text) ? 3 : 0) + (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+$/.test(text) ? 5 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      fallback = text;
+    }
+  });
+  return fallback;
+}
+
+function headerLabelsFor(table, column) {
+  return [column, titleize(column), ...((importAliases[table] || {})[column] || [])].map(normalizeHeader);
+}
+
+function headerScore(table, header) {
+  const tableColumns = columns[table] || [];
+  return tableColumns.reduce((score, column) => {
+    const labels = headerLabelsFor(table, column);
+    const found = labels.some((label) => header.includes(label));
+    if (!found) return score;
+    return score + (["candidate", "position"].includes(column) ? 3 : 1);
+  }, 0);
+}
+
+function findImportHeader(table, rawRows) {
+  const candidates = rawRows.slice(0, 10).map((row, index) => ({
+    index,
+    header: (row || []).map(normalizeHeader)
+  }));
+  return candidates
+    .map((item) => ({ ...item, score: headerScore(table, item.header) }))
+    .sort((a, b) => b.score - a.score)[0] || { index: 0, header: [] };
+}
+
+function columnIndexesFor(table, header) {
+  const used = new Set();
+  const tableColumns = columns[table] || [];
+  return Object.fromEntries(tableColumns.map((column) => {
+    const labels = headerLabelsFor(table, column);
+    const index = labels
+      .map((label) => header.indexOf(label))
+      .find((match) => match >= 0 && !used.has(match));
+    if (index !== undefined) used.add(index);
+    return [column, index];
+  }));
 }
 
 function parseCsv(text) {
@@ -466,22 +603,26 @@ async function readImportRows(file) {
 }
 
 function mapImportRows(table, rawRows) {
-  const aliases = importAliases[table] || {};
   const tableColumns = columns[table] || [];
-  const header = (rawRows[0] || []).map(normalizeHeader);
-  return rawRows.slice(1).map((rawRow) => {
+  const headerInfo = findImportHeader(table, rawRows);
+  const columnIndexes = columnIndexesFor(table, headerInfo.header);
+  const usedIndexes = new Set(Object.values(columnIndexes).filter((index) => index !== undefined && index !== null));
+  return rawRows.slice(headerInfo.index + 1).map((rawRow) => {
     const row = {};
     tableColumns.forEach((column) => {
-      const match = [column, titleize(column), ...(aliases[column] || [])].map(normalizeHeader)
-        .map((label) => header.indexOf(label))
-        .find((index) => index >= 0);
+      const match = columnIndexes[column];
       if (match === undefined) return;
-      const value = String(rawRow[match] || "").trim();
+      const value = cleanImportValue(table, column, rawRow[match]);
       if (value !== "") row[column] = value;
     });
+    if (!looksLikeNameValue(row.candidate)) {
+      const fallback = fallbackCandidateFromRow(rawRow, usedIndexes);
+      if (fallback) row.candidate = fallback;
+      else delete row.candidate;
+    }
     if (!row.status) row.status = "Applied";
     return row;
-  }).filter((row) => Object.keys(row).some((key) => key !== "status") && row.candidate);
+  }).filter((row) => Object.keys(row).some((key) => key !== "status") && looksLikeNameValue(row.candidate));
 }
 
 async function importTableFile(table, file) {
@@ -494,13 +635,81 @@ async function importTableFile(table, file) {
   return rows.length;
 }
 
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function downloadRecruitmentTemplate() {
+  const headers = [
+    "Candidate",
+    "Position",
+    "Source",
+    "Mobile",
+    "Location",
+    "GCC Experience",
+    "Total Experience",
+    "Current Salary",
+    "Expected Salary",
+    "Notice Period",
+    "Interview Date",
+    "Status"
+  ];
+  const sample = [
+    "Candidate Name",
+    "Position Applied",
+    "LinkedIn / Referral / Walk-in",
+    "05xxxxxxxx",
+    "Abu Dhabi",
+    "2 Years",
+    "5 Years",
+    "5000",
+    "7000",
+    "30 Days",
+    "2026-07-16",
+    "Applied"
+  ];
+  const lines = [headers, sample].map((row) => row.map(csvCell).join(","));
+  const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  const href = URL.createObjectURL(blob);
+  link.href = href;
+  link.download = "recruitment-import-template.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+function exportTableCsv(table) {
+  const tableColumns = columns[table] || [];
+  const rows = [...(state.rows[table] || [])];
+  if (!rows.length) throw new Error("No candidate records available to export.");
+  const header = ["Sr. No", ...tableColumns.map(titleize)];
+  const lines = [
+    header.map(csvCell).join(","),
+    ...rows.map((row, index) => [index + 1, ...tableColumns.map((column) => row[column] ?? "")].map(csvCell).join(","))
+  ];
+  const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  const href = URL.createObjectURL(blob);
+  link.href = href;
+  link.download = `${table}-data-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
 document.addEventListener("click", async (event) => {
   const pageButton = event.target.closest("[data-page]");
   const filterButton = event.target.closest("[data-filter]");
   const saveButton = event.target.closest("[data-save]");
   const deleteButton = event.target.closest("[data-delete]");
   const importButton = event.target.closest("[data-import]");
+  const exportButton = event.target.closest("[data-export]");
   const clearButton = event.target.closest("[data-clear-table]");
+  const templateButton = event.target.closest("[data-recruitment-template]");
 
   try {
     if (pageButton) await showPage(pageButton.dataset.page);
@@ -508,12 +717,18 @@ document.addEventListener("click", async (event) => {
       state.activeFilter = filterButton.dataset.filter;
       await showPage(state.page);
     }
-    if ((saveButton || deleteButton || importButton || clearButton) && !canEdit()) {
+    if ((saveButton || deleteButton || importButton || exportButton || clearButton) && !canEdit()) {
       alert("This test profile is view-only.");
       return;
     }
     if (importButton) {
       $("#recruitmentImportFile")?.click();
+    }
+    if (exportButton) {
+      exportTableCsv(exportButton.dataset.export);
+    }
+    if (templateButton) {
+      downloadRecruitmentTemplate();
     }
     if (clearButton && confirm("This will delete all Recruitment Tracker records. Continue?")) {
       clearButton.disabled = true;
@@ -554,7 +769,7 @@ $("#loginForm").addEventListener("submit", async (event) => {
   $("#loginMessage").textContent = "";
   try {
     state.session = await signIn($("#username").value, $("#password").value);
-    await loadPageData();
+    await loadDashboardData();
     renderShell();
     renderDashboard();
   } catch (error) {
@@ -596,7 +811,11 @@ $("#refreshButton").addEventListener("click", async () => {
     renderShell();
     return;
   }
-  await loadPageData();
+  if (state.page === "dashboard") await loadDashboardData({ force: true });
+  else {
+    const page = pages.find((item) => item.key === state.page);
+    await ensurePageData(page, { force: true });
+  }
   await showPage(state.page);
 });
 
@@ -645,11 +864,12 @@ $("#recordForm").addEventListener("submit", async (event) => {
   renderShell();
   if (state.session) {
     state.portalUser = await verifyPortalAccess();
-    await loadPageData();
+    await loadDashboardData();
     await showPage(state.page);
   }
   updateAbuDhabiTime();
   setInterval(updateAbuDhabiTime, 30000);
   loadAbuDhabiWeather();
   setInterval(loadAbuDhabiWeather, 900000);
+})();
 })();
