@@ -4,7 +4,7 @@ const client = supabaseReady ? window.supabase.createClient(config.url, config.a
 
 const pages = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "employees", label: "Employee Master", table: "employees", filters: ["All", "Operations", "P&C and Administration", "Procurement"] },
+  { key: "employees", label: "Employee Master", table: "employees", filters: ["All", "Operations", "P&C", "Procurement", "Finance"] },
   { key: "recruitment", label: "Recruitment Tracker", table: "recruitment" },
   { key: "interview_evaluation", label: "Interview Evaluation", table: "interview_evaluation" },
   { key: "attendance", label: "Attendance Portal", external: "https://citi-homes.github.io/Attendance.Portal/index.html" },
@@ -33,7 +33,7 @@ const columns = {
 };
 
 const options = {
-  department: ["Operations", "P&C and Administration", "Procurement"],
+  department: ["Operations", "P&C", "Procurement", "Finance"],
   status: ["Active", "Probation", "Inactive", "Applied", "Screening", "Shortlisted", "Interview Scheduled", "Selected", "Offer Sent", "Joined", "Rejected", "Hold", "Pending", "In Progress", "Completed", "Valid", "Expiring Soon", "Expired"],
   final_decision: ["Strongly recommended", "Recommended", "Recommended with reservations", "Do not recommend"],
   employment_type: ["Employee", "Contract", "Temporary", "Intern"],
@@ -49,6 +49,7 @@ const displayNames = {
 
 const superUserEmails = new Set(["umer@citihomes.ae"]);
 const viewerEmails = new Set(["test@citihomes.ae"]);
+const dashboardTables = ["employees", "recruitment", "documents", "utilities"];
 
 let state = {
   session: null,
@@ -57,6 +58,7 @@ let state = {
   rows: {},
   activeFilter: "All",
   search: "",
+  weather: null,
   savedRows: new Set()
 };
 
@@ -78,7 +80,8 @@ function normalizedEmail() {
 function departmentGroup(value = "") {
   const text = String(value).toLowerCase();
   if (text.includes("procurement")) return "Procurement";
-  if (text.includes("p&c") || text.includes("admin") || text.includes("culture")) return "P&C and Administration";
+  if (text.includes("finance")) return "Finance";
+  if (text.includes("p&c") || text.includes("admin") || text.includes("culture")) return "P&C";
   return "Operations";
 }
 
@@ -172,12 +175,44 @@ function renderShell() {
   if (!state.session) return;
 
   const email = state.session.user?.email || "Admin";
-  $("#roleLabel").textContent = `${displayNameForEmail(email)} · secure workspace`;
+  $("#roleLabel").textContent = displayNameForEmail(email);
+  $("#accessLabel").textContent = "Team Member";
   $("#navList").innerHTML = pages.map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
     </button>`
   )).join("");
+}
+
+function updateAbuDhabiTime() {
+  const formatter = new Intl.DateTimeFormat("en-AE", {
+    timeZone: "Asia/Dubai",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  });
+  $("#abuDhabiTime").textContent = formatter.format(new Date());
+}
+
+async function loadAbuDhabiWeather() {
+  try {
+    const response = await fetch("https://api.open-meteo.com/v1/forecast?latitude=24.4539&longitude=54.3773&current=temperature_2m&timezone=Asia%2FDubai");
+    if (!response.ok) throw new Error("Weather unavailable");
+    const payload = await response.json();
+    const value = payload.current?.temperature_2m;
+    state.weather = Number.isFinite(value) ? Math.round(value) : null;
+  } catch {
+    state.weather = null;
+  }
+  $("#abuDhabiWeather").textContent = state.weather === null ? "--°C" : `${state.weather}°C`;
+}
+
+function setTopActions() {
+  $(".table-search").hidden = true;
+  $("#dashboardMeta").hidden = false;
+  $("#refreshButton").textContent = "Sign out";
+  updateAbuDhabiTime();
+  $("#abuDhabiWeather").textContent = state.weather === null ? "--°C" : `${state.weather}°C`;
 }
 
 function metric(label, value) {
@@ -188,22 +223,23 @@ function renderDashboard() {
   $("#dashboard").hidden = false;
   $("#tablePage").hidden = true;
   $("#pageTitle").textContent = "Dashboard";
+  setTopActions();
 
   const employeeCount = (state.rows.employees || []).length;
   const recruitmentOpen = (state.rows.recruitment || []).filter((row) => !["Joined", "Rejected"].includes(row.status)).length;
   const documentsDue = (state.rows.documents || []).filter((row) => row.status !== "Valid").length;
-  const vendorCount = (state.rows.vendors || []).length;
+  const utilityBillCount = (state.rows.utilities || []).length;
 
   $("#dashboard").innerHTML = `
     <div class="summary-grid">
       ${metric("Employees", employeeCount)}
       ${metric("Open Recruitment", recruitmentOpen)}
       ${metric("Document Alerts", documentsDue)}
-      ${metric("Vendors", vendorCount)}
+      ${metric("Utility Bills", utilityBillCount)}
     </div>
     <div class="glass empty-state">
       <h3>Citi Homes Administration</h3>
-      <p>Manage Operations, P&C and Administration, Procurement, recruitment, attendance, pantry, vendors and office controls from one clean dashboard.</p>
+      <p>Manage Operations, P&C, Administration, Procurement, recruitment, attendance, pantry, utility bills and office controls from one clean dashboard.</p>
     </div>
   `;
 }
@@ -222,6 +258,7 @@ function renderTablePage(page) {
   $("#dashboard").hidden = true;
   $("#tablePage").hidden = false;
   $("#pageTitle").textContent = page.label;
+  setTopActions();
 
   const rows = filteredRows(page);
   $("#summaryCards").innerHTML = `
@@ -343,6 +380,23 @@ async function loadPageData() {
   }));
 }
 
+async function loadTables(tables, options = {}) {
+  const uniqueTables = [...new Set(tables)];
+  await Promise.all(uniqueTables.map(async (table) => {
+    if (!options.force && state.rows[table]) return;
+    state.rows[table] = await fetchRows(table);
+  }));
+}
+
+async function loadDashboardData(options = {}) {
+  await loadTables(dashboardTables, options);
+}
+
+async function ensurePageData(page, options = {}) {
+  if (!page.table) return;
+  await loadTables([page.table], options);
+}
+
 async function showPage(key) {
   const page = pages.find((item) => item.key === key) || pages[0];
   if (page.external) {
@@ -351,8 +405,13 @@ async function showPage(key) {
   }
   state.page = page.key;
   renderShell();
-  if (page.key === "dashboard") renderDashboard();
-  else renderTablePage(page);
+  if (page.key === "dashboard") {
+    await loadDashboardData();
+    renderDashboard();
+  } else {
+    await ensurePageData(page);
+    renderTablePage(page);
+  }
 }
 
 function rowFromElement(rowElement) {
@@ -515,7 +574,7 @@ $("#loginForm").addEventListener("submit", async (event) => {
   $("#loginMessage").textContent = "";
   try {
     state.session = await signIn($("#username").value, $("#password").value);
-    await loadPageData();
+    await loadDashboardData();
     renderShell();
     renderDashboard();
   } catch (error) {
@@ -531,8 +590,11 @@ $("#logoutButton").addEventListener("click", async () => {
 });
 
 $("#refreshButton").addEventListener("click", async () => {
-  await loadPageData();
-  await showPage(state.page);
+  if (client) await client.auth.signOut();
+  state.session = null;
+  state.portalUser = null;
+  state.rows = {};
+  renderShell();
 });
 
 $("#globalSearch").addEventListener("input", async (event) => {
@@ -576,7 +638,11 @@ document.addEventListener("change", async (event) => {
   renderShell();
   if (state.session) {
     state.portalUser = await verifyPortalAccess();
-    await loadPageData();
+    await loadDashboardData();
     await showPage(state.page);
   }
+  updateAbuDhabiTime();
+  setInterval(updateAbuDhabiTime, 30000);
+  loadAbuDhabiWeather();
+  setInterval(loadAbuDhabiWeather, 900000);
 })();
