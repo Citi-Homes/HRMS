@@ -593,6 +593,7 @@ td input, td select {
   min-width: 58px;
   height: 34px;
   justify-content: center;
+  overflow: hidden;
   transition: width 0.18s ease, min-width 0.18s ease, border-radius 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -622,6 +623,8 @@ td input, td select {
 .row-actions .save-button.saved {
   background: linear-gradient(135deg, var(--green), var(--gold));
   color: #fff;
+  font-size: 0.95rem;
+  line-height: 1;
   box-shadow: 0 12px 24px rgba(95, 81, 48, 0.24);
   pointer-events: none;
 }
