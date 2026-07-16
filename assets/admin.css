@@ -1259,3 +1259,94 @@ td:nth-child(5) select {
   transform: translateY(-50%) scale(0.96) !important;
   filter: brightness(1.08);
 }
+
+
+/* Final login polish: eye password control and brand alignment */
+.login-brand {
+  display: grid !important;
+  grid-template-columns: 78px minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 1rem !important;
+  min-height: 150px !important;
+}
+
+.login-brand .brand-mark {
+  height: 150px !important;
+  align-self: stretch !important;
+  border-radius: 34px !important;
+}
+
+.login-title-stack {
+  min-height: 150px !important;
+  height: 150px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  padding: 0.05rem 0 0.1rem !important;
+  overflow: visible !important;
+}
+
+.login-brand h1 {
+  margin: 0 !important;
+  line-height: 0.9 !important;
+  max-width: 100% !important;
+}
+
+.login-subtitle {
+  margin: 0 !important;
+  line-height: 1.05 !important;
+  max-width: 100% !important;
+}
+
+.password-field input {
+  padding-right: 4.15rem !important;
+}
+
+.password-field button,
+#passwordToggle {
+  position: absolute !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  height: 34px !important;
+  overflow: hidden !important;
+}
+
+.password-field button::before,
+#passwordToggle::before {
+  content: "" !important;
+  width: 18px !important;
+  height: 12px !important;
+  border: 2px solid rgba(255, 250, 240, 0.95) !important;
+  border-radius: 70% 30% 70% 30% / 55% 45% 55% 45% !important;
+  transform: rotate(45deg) !important;
+  background: rgba(255, 250, 240, 0.08) !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 37, 39, 0.12) !important;
+}
+
+.password-field button::after,
+#passwordToggle::after {
+  content: "" !important;
+  position: absolute !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: #fffaf0 !important;
+  box-shadow: 0 0 0 1px rgba(36, 37, 39, 0.22) !important;
+}
+
+.password-field button.password-visible,
+#passwordToggle.password-visible,
+.password-field button:active,
+#passwordToggle:active {
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.26), transparent 34%),
+    linear-gradient(135deg, rgba(83,107,82,0.98), rgba(185,154,95,0.88)) !important;
+}
+
+.password-field button.password-visible::before,
+#passwordToggle.password-visible::before,
+.password-field button:active::before,
+#passwordToggle:active::before {
+  border-color: #ffffff !important;
+  background: rgba(255,255,255,0.16) !important;
+}
