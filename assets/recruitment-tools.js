@@ -24,10 +24,18 @@
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 
-  function addExportButton() {
+  function addPageTools() {
     const pageTitle = document.querySelector("#pageTitle");
     const tools = document.querySelector("#pageTools");
-    if (!pageTitle || !tools || pageTitle.textContent.trim() !== "Recruitment Tracker") return;
+    if (!pageTitle || !tools) return;
+
+    const title = pageTitle.textContent.trim();
+    if (title === "Employee Master") {
+      addEmployeeExportButton(tools);
+      return;
+    }
+
+    if (title !== "Recruitment Tracker") return;
     const importButton = tools.querySelector("[data-import='recruitment']");
     const clearButton = tools.querySelector("[data-clear-table]");
     let button = tools.querySelector("[data-export='recruitment'], [data-export-candidates]");
@@ -52,6 +60,16 @@
     addTemplateButton();
   }
 
+  function addEmployeeExportButton(tools) {
+    if (tools.querySelector("[data-export-employees]")) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pill";
+    button.dataset.exportEmployees = "true";
+    button.textContent = "Export Employee Master Data";
+    tools.appendChild(button);
+  }
+
   function addTemplateButton() {
     const pageTitle = document.querySelector("#pageTitle");
     const panel = document.querySelector("#addRecordPanel");
@@ -65,9 +83,9 @@
     panel.appendChild(button);
   }
 
-  function exportCandidates() {
+  function exportVisibleTable(filenamePrefix, emptyMessage) {
     const table = document.querySelector("#dataTable");
-    if (!table) return alert("Recruitment table is not available.");
+    if (!table) return alert("Table is not available.");
     const headers = [...table.querySelectorAll("thead th")].map((cell) => cell.textContent.trim());
     const rows = [...table.querySelectorAll("tbody tr")].map((row) => (
       [...row.querySelectorAll("td")].map((cell) => {
@@ -76,18 +94,26 @@
       })
     ));
     if (!rows.length || rows.every((row) => row.join("").includes("No records found"))) {
-      alert("No candidate records available to export.");
+      alert(emptyMessage);
       return;
     }
     const lines = [headers, ...rows].map((row) => row.map(csvCell).join(","));
     const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `recruitment-candidates-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     URL.revokeObjectURL(link.href);
     link.remove();
+  }
+
+  function exportCandidates() {
+    exportVisibleTable("recruitment-candidates", "No candidate records available to export.");
+  }
+
+  function exportEmployees() {
+    exportVisibleTable("employee-master", "No employee records available to export.");
   }
 
   function downloadTemplate() {
@@ -135,13 +161,17 @@
       event.preventDefault();
       exportCandidates();
     }
+    if (event.target.closest("[data-export-employees]")) {
+      event.preventDefault();
+      exportEmployees();
+    }
     if (event.target.closest("[data-recruitment-template]")) {
       event.preventDefault();
       downloadTemplate();
     }
-    setTimeout(addExportButton, 50);
+    setTimeout(addPageTools, 50);
   });
 
-  new MutationObserver(addExportButton).observe(document.body, { childList: true, subtree: true });
-  addExportButton();
+  new MutationObserver(addPageTools).observe(document.body, { childList: true, subtree: true });
+  addPageTools();
 })();
