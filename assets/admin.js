@@ -286,6 +286,7 @@ function renderTablePage(page) {
 function renderTable(page, rows) {
   const table = $("#dataTable");
   const cols = columns[page.table] || [];
+  table.className = page.table === "recruitment" ? "data-table compact-table recruitment-table" : "data-table";
   if (!rows.length) {
     table.innerHTML = `<tbody><tr><td class="empty-state">No records found.</td></tr></tbody>`;
     return;
