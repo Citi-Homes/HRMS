@@ -543,6 +543,18 @@ h1 {
   background: var(--green);
 }
 
+.import-button {
+  color: #fff;
+  background: linear-gradient(135deg, var(--green), var(--gold));
+  border-color: rgba(255,255,255,0.5);
+}
+
+.danger-outline {
+  color: var(--red);
+  background: rgba(255,255,255,0.74);
+  border-color: rgba(179, 63, 48, 0.26);
+}
+
 .table-wrap {
   overflow: auto;
   border-radius: var(--radius);
@@ -593,6 +605,17 @@ td input, td select {
 .compact-table th {
   font-size: 0.66rem;
   letter-spacing: 0.045em;
+}
+
+.recruitment-table th {
+  position: static;
+  white-space: normal;
+  line-height: 1.15;
+  vertical-align: middle;
+}
+
+.recruitment-table td {
+  vertical-align: middle;
 }
 
 .compact-table td input,
