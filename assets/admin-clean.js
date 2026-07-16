@@ -62,6 +62,10 @@ const importAliases = {
   }
 };
 
+const numericImportColumns = {
+  recruitment: new Set(["gcc_experience", "total_experience", "current_salary", "expected_salary"])
+};
+
 let state = {
   session: null,
   portalUser: null,
@@ -427,6 +431,14 @@ function normalizeHeader(value) {
   return String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 }
 
+function cleanImportValue(table, column, value) {
+  const text = String(value || "").trim();
+  if (!numericImportColumns[table]?.has(column)) return text;
+  const normalized = text.replaceAll(",", "");
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  return match ? match[0] : "";
+}
+
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -502,7 +514,7 @@ function mapImportRows(table, rawRows) {
         .map((label) => header.indexOf(label))
         .find((index) => index >= 0);
       if (match === undefined) return;
-      const value = String(rawRow[match] || "").trim();
+      const value = cleanImportValue(table, column, rawRow[match]);
       if (value !== "") row[column] = value;
     });
     if (!row.status) row.status = "Applied";
