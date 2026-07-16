@@ -44,6 +44,23 @@ const options = {
   reminder_sent: ["No", "Yes"]
 };
 
+const importAliases = {
+  recruitment: {
+    candidate: ["candidate", "candidate name", "name", "applicant", "applicant name"],
+    position: ["position", "job title", "role", "designation", "applied position"],
+    source: ["source", "cv source", "recruitment source"],
+    mobile: ["mobile", "phone", "contact", "contact number", "mobile number"],
+    location: ["location", "city", "current location"],
+    gcc_experience: ["gcc experience", "gcc_experience", "gcc exp"],
+    total_experience: ["total experience", "total_experience", "experience"],
+    current_salary: ["current salary", "current_salary", "salary"],
+    expected_salary: ["expected salary", "expected_salary", "expected"],
+    notice_period: ["notice period", "notice_period", "notice"],
+    interview_date: ["interview date", "interview_date", "date"],
+    status: ["status", "stage"]
+  }
+};
+
 let state = {
   session: null,
   portalUser: null,
@@ -197,6 +214,11 @@ async function deleteRow(table, id) {
   if (error) throw error;
 }
 
+async function clearTable(table) {
+  const { error } = await client.from(table).delete().not("id", "is", null);
+  if (error) throw error;
+}
+
 function renderShell() {
   $("#loginView").hidden = Boolean(state.session);
   $("#appView").hidden = !state.session;
@@ -275,9 +297,17 @@ function renderTablePage(page) {
     ${metric("Added Today", rows.filter((row) => String(row.created_at || "").startsWith(new Date().toISOString().slice(0, 10))).length)}
   `;
 
-  $("#pageTools").innerHTML = page.filters ? page.filters.map((item) => (
+  const filterTools = page.filters ? page.filters.map((item) => (
     `<button class="pill ${state.activeFilter === item ? "active" : ""}" data-filter="${item}">${item}</button>`
-  )).join("") : isViewer() ? `<span class="viewer-notice">View only mode</span>` : "";
+  )).join("") : "";
+  const importTools = page.table === "recruitment" && canEdit()
+    ? `<button class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
+       <button class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
+       <input id="recruitmentImportFile" type="file" accept=".csv,.xlsx,.xls" hidden>`
+    : "";
+  $("#pageTools").innerHTML = filterTools || importTools
+    ? `${filterTools}${importTools}`
+    : isViewer() ? `<span class="viewer-notice">View only mode</span>` : "";
 
   renderTable(page, rows);
   renderForm(page);
@@ -367,11 +397,88 @@ function rowFromElement(rowElement) {
   return row;
 }
 
+function normalizeHeader(value) {
+  return String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => String(value).trim() !== "")) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell);
+  if (row.some((value) => String(value).trim() !== "")) rows.push(row);
+  return rows;
+}
+
+async function readImportRows(file) {
+  if (file.name.toLowerCase().endsWith(".csv")) {
+    return parseCsv(await file.text());
+  }
+  if (!window.XLSX) throw new Error("Excel import library is still loading. Please try again in a few seconds.");
+  const buffer = await file.arrayBuffer();
+  const workbook = window.XLSX.read(buffer, { type: "array", cellDates: false });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+}
+
+function mapImportRows(table, rawRows) {
+  const aliases = importAliases[table] || {};
+  const tableColumns = columns[table] || [];
+  const header = (rawRows[0] || []).map(normalizeHeader);
+  return rawRows.slice(1).map((rawRow) => {
+    const row = {};
+    tableColumns.forEach((column) => {
+      const match = [column, titleize(column), ...(aliases[column] || [])].map(normalizeHeader)
+        .map((label) => header.indexOf(label))
+        .find((index) => index >= 0);
+      if (match === undefined) return;
+      const value = String(rawRow[match] || "").trim();
+      if (value !== "") row[column] = value;
+    });
+    if (!row.status) row.status = "Applied";
+    return row;
+  }).filter((row) => Object.keys(row).some((key) => key !== "status") && row.candidate);
+}
+
+async function importTableFile(table, file) {
+  const rawRows = await readImportRows(file);
+  if (rawRows.length < 2) throw new Error("No import rows found.");
+  const rows = mapImportRows(table, rawRows);
+  if (!rows.length) throw new Error("No valid rows found. Please make sure the file has a Candidate column.");
+  const { error } = await client.from(table).insert(rows);
+  if (error) throw error;
+  return rows.length;
+}
+
 document.addEventListener("click", async (event) => {
   const pageButton = event.target.closest("[data-page]");
   const filterButton = event.target.closest("[data-filter]");
   const saveButton = event.target.closest("[data-save]");
   const deleteButton = event.target.closest("[data-delete]");
+  const importButton = event.target.closest("[data-import]");
+  const clearButton = event.target.closest("[data-clear-table]");
 
   try {
     if (pageButton) await showPage(pageButton.dataset.page);
@@ -379,9 +486,19 @@ document.addEventListener("click", async (event) => {
       state.activeFilter = filterButton.dataset.filter;
       await showPage(state.page);
     }
-    if ((saveButton || deleteButton) && !canEdit()) {
+    if ((saveButton || deleteButton || importButton || clearButton) && !canEdit()) {
       alert("This test profile is view-only.");
       return;
+    }
+    if (importButton) {
+      $("#recruitmentImportFile")?.click();
+    }
+    if (clearButton && confirm("This will delete all Recruitment Tracker records. Continue?")) {
+      clearButton.disabled = true;
+      clearButton.textContent = "Clearing...";
+      await clearTable(clearButton.dataset.clearTable);
+      state.rows[clearButton.dataset.clearTable] = await fetchRows(clearButton.dataset.clearTable);
+      await showPage(state.page);
     }
     if (saveButton) {
       const page = pages.find((item) => item.key === state.page);
@@ -464,6 +581,21 @@ $("#refreshButton").addEventListener("click", async () => {
 $("#globalSearch").addEventListener("input", async (event) => {
   state.search = event.target.value;
   await showPage(state.page);
+});
+
+document.addEventListener("change", async (event) => {
+  if (event.target.id !== "recruitmentImportFile") return;
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const count = await importTableFile("recruitment", file);
+    event.target.value = "";
+    state.rows.recruitment = await fetchRows("recruitment");
+    await showPage("recruitment");
+    alert(`${count} recruitment records imported.`);
+  } catch (error) {
+    alert(error.message || error);
+  }
 });
 
 $("#recordForm").addEventListener("submit", async (event) => {
