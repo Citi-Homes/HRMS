@@ -1650,3 +1650,16 @@ td:nth-child(5) select {
   transform: translateY(0) !important;
   max-width: 100% !important;
 }
+
+
+/* Fix title/subtitle left edge alignment in login lockup */
+.login-title-stack {
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.login-brand h1,
+.login-subtitle {
+  align-self: flex-start !important;
+  text-align: left !important;
+}
