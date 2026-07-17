@@ -1703,3 +1703,19 @@ td:nth-child(5) select {
   line-height: 1.04 !important;
   transform: translateY(0) !important;
 }
+
+
+/* Exact equal height: CH mark matches wordmark block */
+.login-brand {
+  grid-template-columns: 54px minmax(0, 1fr) !important;
+  min-height: 72px !important;
+  gap: 0.88rem !important;
+}
+
+.login-brand .brand-mark {
+  width: 54px !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  flex-basis: 54px !important;
+  border-radius: 23px !important;
+}
