@@ -1663,3 +1663,43 @@ td:nth-child(5) select {
   align-self: flex-start !important;
   text-align: left !important;
 }
+
+
+/* Equalize CH mark height with Citi Homes + Administration System */
+.login-brand {
+  grid-template-columns: 66px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 0.95rem !important;
+  min-height: 92px !important;
+}
+
+.login-brand .brand-mark {
+  width: 66px !important;
+  height: 92px !important;
+  min-height: 92px !important;
+  flex-basis: 66px !important;
+  border-radius: 28px !important;
+  align-self: start !important;
+}
+
+.login-title-stack {
+  height: auto !important;
+  min-height: 0 !important;
+  gap: 0.28rem !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  overflow: visible !important;
+}
+
+.login-brand h1 {
+  font-size: clamp(3.48rem, 6vw, 3.95rem) !important;
+  line-height: 0.88 !important;
+  letter-spacing: -0.075em !important;
+  transform: translate(-0.035em, -0.015em) !important;
+}
+
+.login-subtitle {
+  font-size: clamp(1.02rem, 2vw, 1.15rem) !important;
+  line-height: 1.04 !important;
+  transform: translateY(0) !important;
+}
