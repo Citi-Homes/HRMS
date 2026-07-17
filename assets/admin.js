@@ -125,6 +125,10 @@ async function signIn(email, password) {
 async function verifyPortalAccess() {
   const email = normalizedEmail();
   if (!email) throw new Error("Unable to identify the signed-in account.");
+  // Hardcoded super users bypass the admin_portal_users table check
+  if (superUserEmails.has(email)) {
+    return { email, role: "Super User", is_active: true };
+  }
   const { data, error } = await client
     .from("admin_portal_users")
     .select("email,role,is_active")
