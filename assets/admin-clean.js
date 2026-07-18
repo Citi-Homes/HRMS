@@ -1,4 +1,5 @@
 var config = window.CITI_HOMES_SUPABASE || {};
+
 const supabaseReady = Boolean(config.url && config.anonKey && config.anonKey.length > 20);
 const client = supabaseReady ? window.supabase.createClient(config.url, config.anonKey) : null;
 
