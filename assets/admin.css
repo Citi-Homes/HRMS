@@ -1719,3 +1719,36 @@ td:nth-child(5) select {
   flex-basis: 54px !important;
   border-radius: 23px !important;
 }
+
+.cv-link-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.cv-link-field input {
+  min-width: 180px;
+}
+
+.cv-open-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(185, 154, 95, 0.42);
+  background: linear-gradient(135deg, rgba(91, 113, 77, 0.82), rgba(185, 154, 95, 0.82));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(36, 37, 39, 0.14);
+}
+
+.cv-open-link:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
