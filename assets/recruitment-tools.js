@@ -4,11 +4,20 @@
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 
+  function canExportEmployees() {
+    return typeof window.isSuperUser === "function" && window.isSuperUser();
+  }
+
   function addEmployeeExportButton() {
     const pageTitle = document.querySelector("#pageTitle");
     const tools = document.querySelector("#pageTools");
+    const existing = tools?.querySelector("[data-export-employees]");
     if (!pageTitle || !tools || pageTitle.textContent.trim() !== "Employee Master") return;
-    if (tools.querySelector("[data-export-employees]")) return;
+    if (!canExportEmployees()) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
 
     const button = document.createElement("button");
     button.type = "button";
@@ -49,6 +58,10 @@
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-export-employees]")) {
       event.preventDefault();
+      if (!canExportEmployees()) {
+        alert("You do not have permission to export Employee Master data.");
+        return;
+      }
       exportVisibleTable("employee-master", "No employee records available to export.");
     }
   });
