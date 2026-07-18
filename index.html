@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/admin.css?v=cv-link-20260718">
+  <link rel="stylesheet" href="assets/admin.css?v=cv-visibility-20260718">
 </head>
 <body>
   <main id="loginView" class="login-shell">
@@ -487,6 +487,9 @@ function fieldControl(column, value) {
     const href = String(value || "").trim();
     const safeHref = href.replaceAll('"', "&quot;");
     const openLink = /^https?:\/\//i.test(href) ? `<a class="cv-open-link" href="${safeHref}" target="_blank" rel="noopener">Open CV</a>` : "";
+    if (!isSuperUser()) {
+      return openLink || '<span class="view-only-pill">No CV</span>';
+    }
     return `<div class="cv-link-field"><input data-field="${column}" type="url" value="${safeValue}" placeholder="Paste OneDrive CV link">${openLink}</div>`;
   }
   if (column === "candidate") {
