@@ -1777,3 +1777,36 @@ td:nth-child(5) select {
   min-width: 74px;
   justify-content: center;
 }
+
+.recruitment-table th:nth-child(3),
+.recruitment-table td:nth-child(3) {
+  min-width: 198px !important;
+  width: 198px !important;
+  max-width: 198px !important;
+}
+
+.recruitment-table .cv-link-field {
+  display: grid !important;
+  grid-template-columns: minmax(0, 108px) 76px;
+  align-items: center;
+  gap: 6px !important;
+  width: 190px !important;
+  min-width: 0 !important;
+  max-width: 190px !important;
+}
+
+.recruitment-table .cv-link-field input[data-field="cv_link"] {
+  width: 108px !important;
+  min-width: 0 !important;
+  max-width: 108px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recruitment-table .cv-link-field .cv-open-link {
+  width: 76px !important;
+  min-width: 76px !important;
+  max-width: 76px !important;
+  padding: 0 !important;
+  font-size: 0.72rem !important;
+}
