@@ -1752,3 +1752,28 @@ td:nth-child(5) select {
   filter: brightness(1.04);
   transform: translateY(-1px);
 }
+
+.recruitment-table th:nth-child(2),
+.recruitment-table td:nth-child(2) {
+  min-width: 170px !important;
+  width: 170px !important;
+}
+
+.recruitment-table th:nth-child(3),
+.recruitment-table td:nth-child(3) {
+  min-width: 118px !important;
+  width: 118px !important;
+  max-width: 130px !important;
+}
+
+.recruitment-table th:nth-child(4),
+.recruitment-table td:nth-child(4) {
+  min-width: 210px !important;
+  width: 210px !important;
+}
+
+.recruitment-table .cv-open-link,
+.recruitment-table .view-only-pill {
+  min-width: 74px;
+  justify-content: center;
+}
