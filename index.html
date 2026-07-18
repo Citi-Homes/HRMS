@@ -200,6 +200,14 @@ function canEdit() {
   return !isViewer() || isSuperUser();
 }
 
+function canViewAttendancePortal() {
+  return isSuperUser();
+}
+
+function canViewPage(page) {
+  return page.key !== "attendance" || canViewAttendancePortal();
+}
+
 function csvCell(value) {
   const text = String(value ?? "");
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -316,7 +324,7 @@ function renderShell() {
   const email = state.session.user?.email || "Admin";
   $("#roleLabel").textContent = displayNameForEmail(email);
   $("#accessLabel").textContent = "Team Member";
-  $("#navList").innerHTML = pages.map((page) => (
+  $("#navList").innerHTML = pages.filter(canViewPage).map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
     </button>`
@@ -548,7 +556,7 @@ async function ensurePageData(page, options = {}) {
 }
 
 async function showPage(key) {
-  const page = pages.find((item) => item.key === key) || pages[0];
+  const page = pages.find((item) => item.key === key && canViewPage(item)) || pages[0];
   if (page.external) {
     window.open(page.external, "_blank", "noopener");
     return;
