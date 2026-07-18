@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/admin.css?v=cv-spacing-20260718">
+  <link rel="stylesheet" href="assets/admin.css?v=cv-spacing-class-20260718">
 </head>
 <body>
   <main id="loginView" class="login-shell">
@@ -427,6 +427,7 @@ function renderTablePage(page) {
 function renderTable(page, rows) {
   const table = $("#dataTable");
   const cols = columns[page.table] || [];
+  table.className = page.table === "recruitment" ? "compact-table recruitment-table" : "";
   if (!rows.length) {
     table.innerHTML = `<tbody><tr><td class="empty-state">No records found.</td></tr></tbody>`;
     return;
