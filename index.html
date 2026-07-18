@@ -122,7 +122,7 @@ const pages = [
 
 const columns = {
   employees: ["employee_id", "name", "department", "designation", "nationality", "joining_date", "employment_type", "visa_status", "emirates_id_expiry", "passport_expiry", "mobile", "emergency_contact", "status"],
-  recruitment: ["candidate", "position", "source", "mobile", "location", "gcc_experience", "total_experience", "current_salary", "expected_salary", "notice_period", "interview_date", "status"],
+  recruitment: ["candidate", "cv_link", "position", "source", "mobile", "location", "gcc_experience", "total_experience", "current_salary", "expected_salary", "notice_period", "interview_date", "status"],
   interview_evaluation: ["candidate", "position", "department", "interviewer_names", "interview_date", "technical_knowledge", "position_specific_skills", "relevant_experience", "problem_solving_ability", "teamwork", "communication_skills", "confidence_professionalism", "recommended_salary", "final_notice_period", "final_decision", "final_remarks"],
   joining_checklist: ["employee", "offer_letter", "passport_copy", "visa", "emirates_id", "medical", "contract", "insurance", "bank_details", "completed_pct"],
   leave_management: ["employee", "leave_type", "opening_balance", "used", "remaining"],
@@ -167,6 +167,7 @@ let state = {
 const $ = (selector) => document.querySelector(selector);
 
 function titleize(value) {
+  if (value === "cv_link") return "CV Link";
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
@@ -482,6 +483,12 @@ function fallbackCandidateFromRow(row) {
 
 function fieldControl(column, value) {
   const safeValue = String(value).replaceAll('"', "&quot;");
+  if (column === "cv_link") {
+    const href = String(value || "").trim();
+    const safeHref = href.replaceAll('"', "&quot;");
+    const openLink = /^https?:\/\//i.test(href) ? `<a class="cv-open-link" href="${safeHref}" target="_blank" rel="noopener">Open CV</a>` : "";
+    return `<div class="cv-link-field"><input data-field="${column}" type="url" value="${safeValue}" placeholder="Paste OneDrive CV link">${openLink}</div>`;
+  }
   if (column === "candidate") {
     return `<input data-field="${column}" type="text" value="${safeValue}">`;
   }
@@ -565,8 +572,8 @@ function rowFromElement(rowElement) {
 }
 
 function downloadRecruitmentTemplate() {
-  const headers = ["Candidate", "Position", "Source", "Mobile", "Location", "GCC Experience", "Total Experience", "Current Salary", "Expected Salary", "Notice Period", "Interview Date", "Status"];
-  const sample = ["Candidate Name", "Position Applied", "LinkedIn / Referral / Walk-in", "05xxxxxxxx", "Abu Dhabi", "2 Years", "5 Years", "5000", "7000", "30 Days", "2026-07-16", "Applied"];
+  const headers = ["Candidate", "CV Link", "Position", "Source", "Mobile", "Location", "GCC Experience", "Total Experience", "Current Salary", "Expected Salary", "Notice Period", "Interview Date", "Status"];
+  const sample = ["Candidate Name", "https://onedrive.live.com/example-cv-link", "Position Applied", "LinkedIn / Referral / Walk-in", "05xxxxxxxx", "Abu Dhabi", "2 Years", "5 Years", "5000", "7000", "30 Days", "2026-07-16", "Applied"];
   const lines = [headers, sample].map((row) => row.map(csvCell).join(","));
   const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
@@ -631,6 +638,7 @@ function mapImportRows(table, rawRows) {
   const header = (rawRows[0] || []).map(normalizeHeader);
   const aliases = {
     candidate: ["candidate", "candidate name", "full name", "applicant", "applicant name"],
+    cv_link: ["cv link", "candidate cv", "candidate cv link", "resume", "resume link", "onedrive", "onedrive link"],
     position: ["position", "job title", "role", "designation"],
     source: ["source", "cv source", "recruitment source"],
     mobile: ["mobile", "phone", "contact number"],
