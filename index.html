@@ -254,6 +254,41 @@ async function upsertRow(table, row) {
   return data;
 }
 
+function isInterviewScheduled(row) {
+  return String(row?.status || "").trim().toLowerCase() === "interview scheduled";
+}
+
+async function syncInterviewEvaluationFromRecruitment(row) {
+  if (!row || !isInterviewScheduled(row) || !looksLikeNameValue(row.candidate)) return;
+
+  const payload = {
+    candidate: row.candidate,
+    position: row.position || "",
+    department: "Citi Homes",
+    interview_date: row.interview_date || null
+  };
+  Object.keys(payload).forEach((key) => {
+    if (payload[key] === "" || payload[key] === null || payload[key] === undefined) delete payload[key];
+  });
+
+  let query = client.from("interview_evaluation").select("id").eq("candidate", row.candidate).limit(1);
+  if (row.position) query = query.eq("position", row.position);
+  if (row.interview_date) query = query.eq("interview_date", row.interview_date);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const existing = (data || [])[0];
+  if (existing?.id) {
+    const { error: updateError } = await client.from("interview_evaluation").update(payload).eq("id", existing.id);
+    if (updateError) throw updateError;
+    return;
+  }
+
+  const { error: insertError } = await client.from("interview_evaluation").insert(payload);
+  if (insertError) throw insertError;
+}
+
 async function deleteRow(table, id) {
   const { error } = await client.from(table).delete().eq("id", id);
   if (error) throw error;
@@ -451,7 +486,8 @@ function fieldControl(column, value) {
     return `<input data-field="${column}" type="text" value="${safeValue}">`;
   }
   if (options[column]) {
-    return `<select data-field="${column}">${options[column].map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
+    const optionValues = options[column].includes(String(value)) || !value ? options[column] : [String(value), ...options[column]];
+    return `<select data-field="${column}">${optionValues.map((item) => `<option ${String(value) === item ? "selected" : ""}>${item}</option>`).join("")}</select>`;
   }
   const type = column.includes("date") || column.includes("expiry") || column.includes("renewal") ? "date" : "text";
   return `<input data-field="${column}" type="${type}" value="${safeValue}">`;
@@ -628,6 +664,10 @@ async function importTableFile(table, file) {
   if (!rows.length) throw new Error("No valid recruitment rows found.");
   const { error } = await client.from(table).insert(rows);
   if (error) throw error;
+  if (table === "recruitment") {
+    await Promise.all(rows.map((row) => syncInterviewEvaluationFromRecruitment(row)));
+    delete state.rows.interview_evaluation;
+  }
   return rows.length;
 }
 
@@ -657,7 +697,11 @@ document.addEventListener("click", async (event) => {
     }
     if (saveButton) {
       const page = pages.find((item) => item.key === state.page);
-      await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
+      const savedRow = await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
+      if (page.table === "recruitment") {
+        await syncInterviewEvaluationFromRecruitment(savedRow);
+        delete state.rows.interview_evaluation;
+      }
       state.rows[page.table] = await fetchRows(page.table);
       await showPage(state.page);
     }
@@ -709,7 +753,11 @@ $("#recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const page = pages.find((item) => item.key === state.page);
   const row = rowFromElement(event.currentTarget);
-  await upsertRow(page.table, row);
+  const savedRow = await upsertRow(page.table, row);
+  if (page.table === "recruitment") {
+    await syncInterviewEvaluationFromRecruitment(savedRow);
+    delete state.rows.interview_evaluation;
+  }
   state.rows[page.table] = await fetchRows(page.table);
   event.currentTarget.reset();
   await showPage(state.page);
