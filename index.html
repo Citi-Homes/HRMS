@@ -171,6 +171,10 @@ function titleize(value) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]));
+}
+
 function displayNameForEmail(email = "") {
   const normalized = String(email).toLowerCase();
   return displayNames[normalized] || normalized || "Admin";
@@ -198,6 +202,16 @@ function isViewer() {
 
 function canEdit() {
   return !isViewer() || isSuperUser();
+}
+
+function canEditTable(table) {
+  if (table === "employees") return isSuperUser();
+  return canEdit();
+}
+
+function canExportTable(table) {
+  if (table === "employees") return isSuperUser();
+  return canEdit();
 }
 
 function canViewAttendancePortal() {
@@ -417,16 +431,20 @@ function renderTablePage(page) {
   const filterTools = page.filters ? page.filters.map((item) => (
     `<button class="pill ${state.activeFilter === item ? "active" : ""}" data-filter="${item}">${item}</button>`
   )).join("") : "";
-  const recruitmentTools = page.table === "recruitment" && canEdit()
+  const recruitmentTools = page.table === "recruitment" && canEditTable(page.table)
     ? `<button type="button" class="pill import-button" data-import="recruitment">Import Recruitment Data</button>
        <button type="button" class="pill" data-export="recruitment">Export Recruitment Data</button>
        <button type="button" class="pill import-template-button" data-recruitment-template>Import Data Template</button>
        <button type="button" class="pill danger-outline" data-clear-table="recruitment">Clear Recruitment Data</button>
        <input id="recruitmentImportFile" type="file" accept=".csv,.xlsx,.xls" hidden>`
     : "";
-  $("#pageTools").innerHTML = filterTools || recruitmentTools
-    ? `${filterTools}${recruitmentTools}`
-    : (!canEdit() ? `<span class="viewer-notice">View only mode</span>` : "");
+  const employeeTools = page.table === "employees" && canExportTable(page.table)
+    ? `<button type="button" class="pill" data-export="employees">Export Employee Master</button>`
+    : "";
+  const actionTools = `${filterTools}${recruitmentTools}${employeeTools}`;
+  $("#pageTools").innerHTML = actionTools
+    ? actionTools
+    : (!canEditTable(page.table) ? `<span class="viewer-notice">View only mode</span>` : "");
 
   renderTable(page, rows);
   renderForm(page);
@@ -435,6 +453,7 @@ function renderTablePage(page) {
 function renderTable(page, rows) {
   const table = $("#dataTable");
   const cols = columns[page.table] || [];
+  const tableCanEdit = canEditTable(page.table);
   table.className = page.table === "recruitment" ? "compact-table recruitment-table" : "";
   if (!rows.length) {
     table.innerHTML = `<tbody><tr><td class="empty-state">No records found.</td></tr></tbody>`;
@@ -446,9 +465,9 @@ function renderTable(page, rows) {
       ${rows.map((row, index) => `
         <tr data-id="${row.id || ""}">
           <td>${index + 1}</td>
-          ${cols.map((col) => `<td>${fieldControl(col, col === "candidate" ? displayCandidateValue(row) : (row[col] ?? ""))}</td>`).join("")}
+          ${cols.map((col) => `<td>${fieldControl(col, col === "candidate" ? displayCandidateValue(row) : (row[col] ?? ""), tableCanEdit)}</td>`).join("")}
           <td class="row-actions">
-            ${canEdit()
+            ${tableCanEdit
               ? `${saveButtonMarkup(page.table, row.id)}<button type="button" class="danger" data-delete="${row.id}">Delete</button>`
               : `<span class="view-only-pill">View only</span>`}
           </td>
@@ -490,8 +509,11 @@ function fallbackCandidateFromRow(row) {
   return fallback;
 }
 
-function fieldControl(column, value) {
+function fieldControl(column, value, editable = canEdit()) {
   const safeValue = String(value).replaceAll('"', "&quot;");
+  if (!editable && column !== "cv_link") {
+    return `<span class="readonly-cell">${escapeHtml(value || "-")}</span>`;
+  }
   if (column === "cv_link") {
     const href = String(value || "").trim();
     const safeHref = href.replaceAll('"', "&quot;");
@@ -518,7 +540,7 @@ function renderForm(page) {
   if (page.table === "recruitment") {
     $("#addRecordPanel").hidden = false;
   }
-  if (isViewer()) {
+  if (!canEditTable(page.table)) {
     $("#recordForm").innerHTML = "";
     $("#addRecordPanel").hidden = true;
     return;
@@ -707,16 +729,23 @@ document.addEventListener("click", async (event) => {
       state.activeFilter = filterButton.dataset.filter;
       await showPage(state.page);
     }
-    if (importButton) $("#recruitmentImportFile")?.click();
-    if (exportButton) exportTableCsv(exportButton.dataset.export);
+    if (importButton) {
+      if (!canEditTable(importButton.dataset.import)) throw new Error("You do not have permission to import this data.");
+      $("#recruitmentImportFile")?.click();
+    }
+    if (exportButton) {
+      if (!canExportTable(exportButton.dataset.export)) throw new Error("You do not have permission to export this data.");
+      exportTableCsv(exportButton.dataset.export);
+    }
     if (templateButton) downloadRecruitmentTemplate();
-    if (clearButton && confirm("This will delete all Recruitment Tracker records. Continue?")) {
+    if (clearButton && canEditTable(clearButton.dataset.clearTable) && confirm("This will delete all Recruitment Tracker records. Continue?")) {
       await clearTable(clearButton.dataset.clearTable);
       state.rows[clearButton.dataset.clearTable] = await fetchRows(clearButton.dataset.clearTable);
       await showPage(state.page);
     }
     if (saveButton) {
       const page = pages.find((item) => item.key === state.page);
+      if (!canEditTable(page.table)) throw new Error("You do not have permission to edit this data.");
       const savedRow = await upsertRow(page.table, rowFromElement(saveButton.closest("tr")));
       if (page.table === "recruitment") {
         await syncInterviewEvaluationFromRecruitment(savedRow);
@@ -727,6 +756,7 @@ document.addEventListener("click", async (event) => {
     }
     if (deleteButton && confirm("Delete this record?")) {
       const page = pages.find((item) => item.key === state.page);
+      if (!canEditTable(page.table)) throw new Error("You do not have permission to delete this data.");
       await deleteRow(page.table, deleteButton.dataset.delete);
       state.rows[page.table] = await fetchRows(page.table);
       await showPage(state.page);
@@ -772,6 +802,7 @@ $("#globalSearch").addEventListener("input", async (event) => {
 $("#recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const page = pages.find((item) => item.key === state.page);
+  if (!canEditTable(page.table)) throw new Error("You do not have permission to add this data.");
   const row = rowFromElement(event.currentTarget);
   const savedRow = await upsertRow(page.table, row);
   if (page.table === "recruitment") {
