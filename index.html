@@ -489,19 +489,46 @@ function leaveBalanceForEmployee(employeeValue, excludingId = null) {
   return { employee, accrued, used: Number(used.toFixed(2)), remaining: Number(Math.max(0, accrued - used).toFixed(2)) };
 }
 
-function leavePolicyPanel(rows) {
-  const pending = rows.filter((row) => String(row.approval_status || "Pending") === "Pending").length;
-  const approved = rows.filter((row) => String(row.approval_status || "") === "Approved").length;
+function currentLeaveEmployee() {
+  const employees = state.rows.employees || [];
+  const email = normalizedEmail();
+  const profileName = displayNameForEmail(email);
+  const normalizedProfileName = normalizePerson(profileName);
+  return employees.find((employee) => {
+    const values = Object.entries(employee || {});
+    const emailMatch = values.some(([key, value]) => key.toLowerCase().includes("email") && String(value || "").toLowerCase() === email);
+    const nameMatch = normalizePerson(employee.name) === normalizedProfileName || normalizePerson(employeeDisplay(employee)).includes(normalizedProfileName);
+    return emailMatch || nameMatch;
+  }) || employeeForLeave(profileName) || employees[0] || null;
+}
+
+function leaveEntitlementForEmployee(employee) {
+  const join = parseAppDate(employee?.joining_date);
+  if (!join) return "Not Set";
+  const firstAnniversary = new Date(join);
+  firstAnniversary.setFullYear(firstAnniversary.getFullYear() + 1);
+  return new Date() >= firstAnniversary ? "30 Days" : "24 Days";
+}
+
+function upcomingLeaveStatus(employee, rows = state.rows.leave_management || []) {
+  if (!employee) return "No Leave";
+  const target = normalizePerson(employeeDisplay(employee));
+  const today = parseAppDate(todayIso());
+  const upcomingRows = rows.filter((row) => {
+    const rowEmployee = normalizePerson(employeeDisplay(employeeForLeave(row.employee)) || row.employee);
+    const start = parseAppDate(row.start_date);
+    return rowEmployee === target && start && start >= today;
+  });
+  if (upcomingRows.some((row) => String(row.approval_status || "Pending") === "Pending")) return "Pending for Approval";
+  if (upcomingRows.some((row) => String(row.approval_status || "") === "Approved")) return "Approved";
+  return "No Leave";
+}
+
+function leavePolicyPanel() {
   return `
-    <div class="summary-grid leave-policy-grid">
-      ${metric("Accrual Rule", "2 days / month")}
-      ${metric("After 1 Year", "2.5 days / month")}
-      ${metric("Pending Approval", pending)}
-      ${metric("Approved Requests", approved)}
-    </div>
     <div class="page-tools leave-policy-note">
-      <span class="pill active">Annual Leave balance is calculated up to ${todayIso()}</span>
-      <span class="viewer-notice">Annual Leave requests deduct accrued days only after superuser approval. Sick Leave, Work From Home and Emergency Leave do not deduct annual balance.</span>
+      <span class="viewer-notice">Annual leave accrues at 2 days per month from joining date until completion of 1 year.</span>
+      <span class="viewer-notice">After 1 year completion, annual leave accrues at 2.5 days per month; balance is calculated up to ${todayIso()} and deducted only after superuser approval.</span>
     </div>
   `;
 }
@@ -512,12 +539,17 @@ function renderLeaveManagementPage(page, rows) {
   $("#pageTitle").textContent = page.label;
   setTopActions();
 
+const summaryEmployee = currentLeaveEmployee();
+  const summaryBalance = leaveBalanceForEmployee(employeeDisplay(summaryEmployee));
+  const accruedDays = Number(summaryBalance.accrued || 0).toFixed(2);
+  const remainingDays = Number(summaryBalance.remaining || 0).toFixed(2);
+  const balanceText = summaryBalance.used > 0 ? `${remainingDays} / ${accruedDays} Days` : `${accruedDays} Days`;
   $("#summaryCards").innerHTML = `
-    ${metric("Total Requests", (state.rows.leave_management || []).length)}
-    ${metric("Current View", rows.length)}
-    ${metric("Pending Approval", rows.filter((row) => String(row.approval_status || "Pending") === "Pending").length)}
+    ${metric("Leave Category", leaveEntitlementForEmployee(summaryEmployee))}
+    ${metric("Current Leave Balance / Accrued Leave", balanceText)}
+    ${metric("Upcoming Leave", upcomingLeaveStatus(summaryEmployee, state.rows.leave_management || []))}
   `;
-  $("#pageTools").innerHTML = leavePolicyPanel(rows);
+  $("#pageTools").innerHTML = leavePolicyPanel();
 
   const table = $("#dataTable");
   table.className = "compact-table leave-table";
