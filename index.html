@@ -125,7 +125,7 @@ const columns = {
   recruitment: ["candidate", "cv_link", "position", "source", "mobile", "location", "gcc_experience", "total_experience", "current_salary", "expected_salary", "notice_period", "interview_date", "status"],
   interview_evaluation: ["candidate", "position", "department", "interviewer_names", "interview_date", "technical_knowledge", "position_specific_skills", "relevant_experience", "problem_solving_ability", "teamwork", "communication_skills", "confidence_professionalism", "recommended_salary", "final_notice_period", "final_decision", "final_remarks"],
   joining_checklist: ["employee", "offer_letter", "passport_copy", "visa", "emirates_id", "medical", "contract", "insurance", "bank_details", "completed_pct"],
-  leave_management: ["employee", "leave_type", "opening_balance", "used", "remaining"],
+  leave_management: ["employee", "leave_type", "start_date", "end_date", "requested_days", "accrued_to_date", "used", "remaining", "approval_status", "approved_by", "approved_at", "remarks"],
   documents: ["employee", "document", "expiry_date", "reminder_date", "status"],
   pantry: ["month", "item", "opening", "purchased", "used", "closing", "required_next_month", "cost"],
   utilities: ["utility", "vendor", "invoice_date", "due_date", "amount", "status", "reminder_sent"],
@@ -141,7 +141,9 @@ const options = {
   employment_type: ["Employee", "Contract", "Temporary", "Intern"],
   visa_status: ["Not Started", "Processing", "Issued", "Renewal", "On Hold", "Cancelled"],
   contract_status: ["Active", "Pending", "Expired", "Renewal"],
-  reminder_sent: ["No", "Yes"]
+  reminder_sent: ["No", "Yes"],
+  leave_type: ["Annual Leave", "Sick Leave", "Work From Home", "Emergency Leave"],
+  approval_status: ["Pending", "Approved", "Rejected"]
 };
 
 const displayNames = {
@@ -218,6 +220,10 @@ function canViewAttendancePortal() {
   return isSuperUser();
 }
 
+function canRequestLeave() {
+  return isSuperUser() || Boolean(state.portalUser?.can_manage_leave) || (!isViewer() && canEdit());
+}
+
 function canViewPage(page) {
   return page.key !== "attendance" || canViewAttendancePortal();
 }
@@ -253,7 +259,7 @@ async function verifyPortalAccess() {
   if (!email) throw new Error("Unable to identify the signed-in account.");
   const { data, error } = await client
     .from("admin_portal_users")
-    .select("email,role,is_active")
+    .select("email,role,is_active,can_manage_leave,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_vendors,can_manage_inventory,can_manage_pantry")
     .eq("email", email)
     .eq("is_active", true)
     .maybeSingle();
@@ -415,6 +421,197 @@ function filteredRows(page) {
   });
 }
 
+function parseAppDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysBetweenInclusive(startValue, endValue) {
+  const start = parseAppDate(startValue);
+  const end = parseAppDate(endValue);
+  if (!start || !end || end < start) return 0;
+  return Math.floor((end - start) / 86400000) + 1;
+}
+
+function annualAccruedDays(joiningDate, asOfDate = new Date()) {
+  const join = parseAppDate(joiningDate);
+  if (!join || asOfDate < join) return 0;
+  const firstAnniversary = new Date(join);
+  firstAnniversary.setFullYear(firstAnniversary.getFullYear() + 1);
+  const firstEnd = asOfDate < firstAnniversary ? asOfDate : firstAnniversary;
+  const firstDays = Math.max(0, (firstEnd - join) / 86400000);
+  const laterDays = asOfDate > firstAnniversary ? Math.max(0, (asOfDate - firstAnniversary) / 86400000) : 0;
+  return Number(((firstDays * (24 / 365)) + (laterDays * (30 / 365))).toFixed(2));
+}
+
+function normalizePerson(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function employeeDisplay(employee) {
+  if (!employee) return "";
+  return [employee.employee_id, employee.name].filter(Boolean).join(" - ") || employee.name || employee.employee_id || "";
+}
+
+function employeeForLeave(value) {
+  const employees = state.rows.employees || [];
+  const target = normalizePerson(value);
+  return employees.find((employee) => {
+    const name = normalizePerson(employee.name);
+    const id = normalizePerson(employee.employee_id);
+    const combined = normalizePerson(employeeDisplay(employee));
+    return target === name || target === id || target === combined || combined.includes(target) || target.includes(name);
+  }) || null;
+}
+
+function approvedAnnualUsedByEmployee(employeeValue, rows = state.rows.leave_management || [], excludingId = null) {
+  const employee = employeeForLeave(employeeValue);
+  const target = normalizePerson(employeeDisplay(employee) || employeeValue);
+  return rows.reduce((sum, row) => {
+    if (excludingId && String(row.id) === String(excludingId)) return sum;
+    if (String(row.leave_type || "").toLowerCase() !== "annual leave") return sum;
+    if (String(row.approval_status || "").toLowerCase() !== "approved") return sum;
+    const rowEmployee = normalizePerson(employeeDisplay(employeeForLeave(row.employee)) || row.employee);
+    if (rowEmployee !== target) return sum;
+    return sum + Number(row.requested_days || row.used || 0);
+  }, 0);
+}
+
+function leaveBalanceForEmployee(employeeValue, excludingId = null) {
+  const employee = employeeForLeave(employeeValue);
+  const accrued = annualAccruedDays(employee?.joining_date, new Date());
+  const used = approvedAnnualUsedByEmployee(employeeDisplay(employee) || employeeValue, state.rows.leave_management || [], excludingId);
+  return { employee, accrued, used: Number(used.toFixed(2)), remaining: Number(Math.max(0, accrued - used).toFixed(2)) };
+}
+
+function leavePolicyPanel(rows) {
+  const pending = rows.filter((row) => String(row.approval_status || "Pending") === "Pending").length;
+  const approved = rows.filter((row) => String(row.approval_status || "") === "Approved").length;
+  return `
+    <div class="summary-grid leave-policy-grid">
+      ${metric("Accrual Rule", "2 days / month")}
+      ${metric("After 1 Year", "2.5 days / month")}
+      ${metric("Pending Approval", pending)}
+      ${metric("Approved Requests", approved)}
+    </div>
+    <div class="page-tools leave-policy-note">
+      <span class="pill active">Annual Leave balance is calculated up to ${todayIso()}</span>
+      <span class="viewer-notice">Annual Leave requests deduct accrued days only after superuser approval. Sick Leave, Work From Home and Emergency Leave do not deduct annual balance.</span>
+    </div>
+  `;
+}
+
+function renderLeaveManagementPage(page, rows) {
+  $("#dashboard").hidden = true;
+  $("#tablePage").hidden = false;
+  $("#pageTitle").textContent = page.label;
+  setTopActions();
+
+  $("#summaryCards").innerHTML = `
+    ${metric("Total Requests", (state.rows.leave_management || []).length)}
+    ${metric("Current View", rows.length)}
+    ${metric("Pending Approval", rows.filter((row) => String(row.approval_status || "Pending") === "Pending").length)}
+  `;
+  $("#pageTools").innerHTML = leavePolicyPanel(rows);
+
+  const table = $("#dataTable");
+  table.className = "compact-table leave-table";
+  if (!rows.length) {
+    table.innerHTML = `<tbody><tr><td class="empty-state">No leave requests found.</td></tr></tbody>`;
+  } else {
+    table.innerHTML = `
+      <thead><tr><th>Sr. No</th><th>Employee</th><th>Leave Category</th><th>Start Date</th><th>End Date</th><th>Requested Days</th><th>Accrued Annual</th><th>Used Annual</th><th>Remaining Annual</th><th>Status</th><th>Remarks</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${rows.map((row, index) => {
+          const requestedDays = Number(row.requested_days || daysBetweenInclusive(row.start_date, row.end_date));
+          const balance = leaveBalanceForEmployee(row.employee, row.id);
+          const isAnnual = String(row.leave_type || "").toLowerCase() === "annual leave";
+          const status = row.approval_status || "Pending";
+          const accrued = isAnnual ? Number(row.accrued_to_date || balance.accrued).toFixed(2) : "-";
+          const used = isAnnual ? Number(row.used || balance.used).toFixed(2) : "-";
+          const remaining = isAnnual ? Number(row.remaining ?? Math.max(0, balance.remaining - (status === "Approved" ? requestedDays : 0))).toFixed(2) : "-";
+          return `
+            <tr data-id="${row.id || ""}">
+              <td>${index + 1}</td>
+              <td><span class="readonly-cell wide-text">${escapeHtml(row.employee || "-")}</span></td>
+              <td><span class="readonly-cell">${escapeHtml(row.leave_type || "-")}</span></td>
+              <td><span class="readonly-cell">${escapeHtml(row.start_date || "-")}</span></td>
+              <td><span class="readonly-cell">${escapeHtml(row.end_date || "-")}</span></td>
+              <td><span class="readonly-cell">${requestedDays || "-"}</span></td>
+              <td><span class="readonly-cell highlighted-balance">${accrued}</span></td>
+              <td><span class="readonly-cell">${used}</span></td>
+              <td><span class="readonly-cell highlighted-balance">${remaining}</span></td>
+              <td><span class="view-only-pill">${escapeHtml(status)}</span></td>
+              <td><span class="readonly-cell wide-text">${escapeHtml(row.remarks || "-")}</span></td>
+              <td class="row-actions">
+                ${isSuperUser() && status !== "Approved" ? `<button type="button" class="save-button" data-approve-leave="${row.id}">Approve</button>` : ""}
+                ${isSuperUser() && status !== "Rejected" ? `<button type="button" class="danger" data-reject-leave="${row.id}">Reject</button>` : ""}
+                ${isSuperUser() ? `<button type="button" class="danger" data-delete-leave="${row.id}">Delete</button>` : `<span class="view-only-pill">View only</span>`}
+              </td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    `;
+  }
+  renderLeaveForm();
+}
+
+function renderLeaveForm() {
+  const panel = $("#addRecordPanel");
+  panel.open = false;
+  if (!canRequestLeave()) {
+    $("#recordForm").innerHTML = "";
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const employeeOptions = (state.rows.employees || []).map((employee) => employeeDisplay(employee)).filter(Boolean);
+  $("#recordForm").innerHTML = `
+    <label>Employee<select data-field="employee" required>${employeeOptions.map((item) => `<option>${escapeHtml(item)}</option>`).join("")}</select></label>
+    <label>Leave Category<select data-field="leave_type">${options.leave_type.map((item) => `<option>${item}</option>`).join("")}</select></label>
+    <label>Start Date<input data-field="start_date" type="date" required></label>
+    <label>End Date<input data-field="end_date" type="date" required></label>
+    <label>Requested Days<input data-field="requested_days" type="number" min="0" step="0.5" placeholder="Auto if blank"></label>
+    <label>Remarks<input data-field="remarks" type="text" placeholder="Reason / notes"></label>
+    <button type="submit">Submit Leave Request</button>
+  `;
+}
+
+async function updateLeaveApproval(id, status) {
+  if (!isSuperUser()) throw new Error("Only the superuser can approve or reject leave requests.");
+  const existing = (state.rows.leave_management || []).find((row) => String(row.id) === String(id));
+  if (!existing) throw new Error("Leave request not found.");
+  const requestedDays = Number(existing.requested_days || daysBetweenInclusive(existing.start_date, existing.end_date));
+  const isAnnual = String(existing.leave_type || "").toLowerCase() === "annual leave";
+  const balance = leaveBalanceForEmployee(existing.employee, id);
+  if (status === "Approved" && isAnnual && requestedDays > balance.remaining) {
+    throw new Error(`Annual leave balance is ${balance.remaining} day(s). Requested ${requestedDays} day(s).`);
+  }
+  const payload = {
+    id: existing.id,
+    approval_status: status,
+    requested_days: requestedDays,
+    accrued_to_date: isAnnual ? balance.accrued : null,
+    used: isAnnual && status === "Approved" ? Number((balance.used + requestedDays).toFixed(2)) : balance.used,
+    remaining: isAnnual && status === "Approved" ? Number(Math.max(0, balance.remaining - requestedDays).toFixed(2)) : balance.remaining,
+    approved_by: normalizedEmail(),
+    approved_at: new Date().toISOString()
+  };
+  const saved = await upsertRow("leave_management", payload);
+  state.savedRows.add(`leave_management:${id}`);
+  setTimeout(() => state.savedRows.delete(`leave_management:${id}`), 1800);
+  state.rows.leave_management = await fetchRows("leave_management");
+  await showPage("leave_management");
+  return saved;
+}
+
+
 function renderTablePage(page) {
   $("#dashboard").hidden = true;
   $("#tablePage").hidden = false;
@@ -422,6 +619,10 @@ function renderTablePage(page) {
   setTopActions();
 
   const rows = filteredRows(page);
+  if (page.table === "leave_management") {
+    renderLeaveManagementPage(page, rows);
+    return;
+  }
   $("#summaryCards").innerHTML = `
     ${metric("Total Records", (state.rows[page.table] || []).length)}
     ${metric("Current View", rows.length)}
@@ -589,7 +790,11 @@ async function showPage(key) {
     await loadDashboardData();
     renderDashboard();
   } else {
-    await ensurePageData(page);
+    if (page.table === "leave_management") {
+      await loadTables(["leave_management", "employees"]);
+    } else {
+      await ensurePageData(page);
+    }
     renderTablePage(page);
   }
 }
@@ -722,8 +927,18 @@ document.addEventListener("click", async (event) => {
   const exportButton = event.target.closest("[data-export]");
   const clearButton = event.target.closest("[data-clear-table]");
   const templateButton = event.target.closest("[data-recruitment-template]");
+  const approveLeaveButton = event.target.closest("[data-approve-leave]");
+  const rejectLeaveButton = event.target.closest("[data-reject-leave]");
+  const deleteLeaveButton = event.target.closest("[data-delete-leave]");
 
   try {
+    if (approveLeaveButton) await updateLeaveApproval(approveLeaveButton.dataset.approveLeave, "Approved");
+    if (rejectLeaveButton) await updateLeaveApproval(rejectLeaveButton.dataset.rejectLeave, "Rejected");
+    if (deleteLeaveButton && isSuperUser() && confirm("Delete this leave request?")) {
+      await deleteRow("leave_management", deleteLeaveButton.dataset.deleteLeave);
+      state.rows.leave_management = await fetchRows("leave_management");
+      await showPage("leave_management");
+    }
     if (pageButton) await showPage(pageButton.dataset.page);
     if (filterButton) {
       state.activeFilter = filterButton.dataset.filter;
@@ -802,6 +1017,25 @@ $("#globalSearch").addEventListener("input", async (event) => {
 $("#recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const page = pages.find((item) => item.key === state.page);
+  if (page.table === "leave_management") {
+    if (!canRequestLeave()) throw new Error("You do not have permission to submit leave requests.");
+    const row = rowFromElement(event.currentTarget);
+    row.approval_status = "Pending";
+    row.requested_by = normalizedEmail();
+    row.submitted_at = new Date().toISOString();
+    row.requested_days = Number(row.requested_days || daysBetweenInclusive(row.start_date, row.end_date));
+    if (!row.requested_days) throw new Error("Please select valid leave dates or requested days.");
+    const balance = leaveBalanceForEmployee(row.employee);
+    const isAnnual = String(row.leave_type || "").toLowerCase() === "annual leave";
+    row.accrued_to_date = isAnnual ? balance.accrued : null;
+    row.used = isAnnual ? balance.used : null;
+    row.remaining = isAnnual ? balance.remaining : null;
+    await upsertRow(page.table, row);
+    state.rows[page.table] = await fetchRows(page.table);
+    event.currentTarget.reset();
+    await showPage(state.page);
+    return;
+  }
   if (!canEditTable(page.table)) throw new Error("You do not have permission to add this data.");
   const row = rowFromElement(event.currentTarget);
   const savedRow = await upsertRow(page.table, row);
