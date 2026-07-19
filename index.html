@@ -541,8 +541,8 @@ function renderLeaveManagementPage(page, rows) {
 
 const summaryEmployee = currentLeaveEmployee();
   const summaryBalance = leaveBalanceForEmployee(employeeDisplay(summaryEmployee));
-  const accruedDays = Number(summaryBalance.accrued || 0).toFixed(2);
-  const remainingDays = Number(summaryBalance.remaining || 0).toFixed(2);
+  const accruedDays = Math.round(Number(summaryBalance.accrued || 0));
+  const remainingDays = Math.round(Number(summaryBalance.remaining || 0));
   const balanceText = summaryBalance.used > 0 ? `${remainingDays} / ${accruedDays} Days` : `${accruedDays} Days`;
   $("#summaryCards").innerHTML = `
     ${metric("Leave Category", leaveEntitlementForEmployee(summaryEmployee))}
