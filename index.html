@@ -207,27 +207,47 @@ function canEdit() {
   return !isViewer() || isSuperUser();
 }
 
+function canViewTable(table) {
+  if (isSuperUser()) return true;
+  const permissions = {
+    employees: "can_view_employee_master",
+    recruitment: "can_view_recruitment",
+    interview_evaluation: "can_view_recruitment",
+    joining_checklist: "can_view_employee_master",
+    leave_management: "can_manage_leave",
+    vendors: "can_manage_vendors",
+    inventory: "can_manage_inventory",
+    pantry: "can_manage_pantry"
+  };
+  const permission = permissions[table];
+  return permission ? Boolean(state.portalUser?.[permission]) : false;
+}
+
 function canEditTable(table) {
   if (table === "employees") return isSuperUser();
-  return canEdit();
+  if (table === "leave_management") return canRequestLeave();
+  if (["vendors", "inventory", "pantry"].includes(table)) return isSuperUser() || canViewTable(table);
+  return isSuperUser();
 }
 
 function canExportTable(table) {
   if (table === "employees") return isSuperUser();
-  return canEdit();
+  return isSuperUser() || canViewTable(table);
 }
 
 function canViewAttendancePortal() {
-  return isSuperUser();
+  return isSuperUser() || Boolean(state.portalUser?.can_view_attendance);
 }
 
 function canRequestLeave() {
-  return isSuperUser() || Boolean(state.portalUser?.can_manage_leave) || (!isViewer() && canEdit());
+  return isSuperUser() || Boolean(state.portalUser?.can_manage_leave);
 }
 
 function canViewPage(page) {
   if (page.key === "access_control") return isSuperUser();
-  return page.key !== "attendance" || canViewAttendancePortal();
+  if (page.key === "attendance") return canViewAttendancePortal();
+  if (page.table) return canViewTable(page.table);
+  return true;
 }
 
 function csvCell(value) {
@@ -1048,22 +1068,26 @@ function renderForm(page) {
 }
 
 async function loadPageData() {
-  const tables = pages.filter((page) => page.table).map((page) => page.table);
-  await Promise.all(tables.map(async (table) => {
-    state.rows[table] = await fetchRows(table);
-  }));
+  const tables = pages.filter((page) => page.table && canViewTable(page.table)).map((page) => page.table);
+  await loadTables(tables, { force: true, optional: true });
 }
 
 async function loadTables(tables, options = {}) {
-  const uniqueTables = [...new Set(tables)];
+  const uniqueTables = [...new Set(tables)].filter((table) => isSuperUser() || canViewTable(table));
   await Promise.all(uniqueTables.map(async (table) => {
     if (!options.force && state.rows[table]) return;
-    state.rows[table] = await fetchRows(table);
+    try {
+      state.rows[table] = await fetchRows(table);
+    } catch (error) {
+      state.rows[table] = [];
+      if (!options.optional) console.warn("Unable to load " + table, error);
+    }
   }));
 }
 
 async function loadDashboardData(options = {}) {
-  await loadTables(dashboardTables, options);
+  const tables = dashboardTables.filter((table) => isSuperUser() || canViewTable(table));
+  await loadTables(tables, { ...options, optional: true });
 }
 
 async function ensurePageData(page, options = {}) {
@@ -1086,7 +1110,7 @@ async function showPage(key) {
     await renderAccessControlPage();
   } else {
     if (page.table === "leave_management") {
-      await loadTables(["leave_management", "employees"]);
+      await loadTables(["leave_management", "employees"], { optional: true });
     } else {
       await ensurePageData(page);
     }
@@ -1290,7 +1314,8 @@ $("#loginForm").addEventListener("submit", async (event) => {
     renderShell();
     renderDashboard();
   } catch (error) {
-    $("#loginMessage").textContent = error.message || "Login failed.";
+    const detail = error?.message || error?.error_description || error?.details || (typeof error === "string" ? error : "Login failed. Please check access and try again.");
+    $("#loginMessage").textContent = detail;
   }
 });
 
