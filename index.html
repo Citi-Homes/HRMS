@@ -1167,7 +1167,7 @@ async function createHierarchyRule(form) {
   if (!payload.employee_name && !["All Records", "Department", "Own Record Only"].includes(payload.visibility_scope)) {
     throw new Error("Please select an assigned employee for this scope.");
   }
-  const { error } = await client.from("employee_hierarchy").upsert(payload, { onConflict: "manager_email,employee_name,employee_id" });
+  const { error } = await client.from("employee_hierarchy").insert(payload);
   if (error) throw error;
   form.reset();
   state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
@@ -1622,7 +1622,11 @@ $("#recordForm").addEventListener("submit", async (event) => {
     return;
   }
   if (page.key === "hierarchy") {
-    await createHierarchyRule(event.currentTarget);
+    try {
+      await createHierarchyRule(event.currentTarget);
+    } catch (error) {
+      alert(error.message || error);
+    }
     return;
   }
   if (page.table === "leave_management") {
