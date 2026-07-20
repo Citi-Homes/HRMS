@@ -259,13 +259,16 @@ async function signIn(email, password) {
 async function verifyPortalAccess() {
   const email = normalizedEmail();
   if (!email) throw new Error("Unable to identify the signed-in account.");
+  const { data: rpcData, error: rpcError } = await client.rpc("get_my_admin_portal_user");
+  if (!rpcError && Array.isArray(rpcData) && rpcData.length) return rpcData[0];
+
   const { data, error } = await client
     .from("admin_portal_users")
-    .select("email,role,is_active,can_manage_leave,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_vendors,can_manage_inventory,can_manage_pantry")
+    .select("email,role,access_level,is_active,can_manage_leave,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_vendors,can_manage_inventory,can_manage_pantry")
     .eq("email", email)
     .eq("is_active", true)
     .maybeSingle();
-  if (error) throw new Error("Your login worked, but the administration access rule is not ready yet.");
+  if (error) throw new Error(rpcError?.message || "Your login worked, but the administration access rule is not ready yet.");
   if (!data) {
     await client.auth.signOut();
     throw new Error("This account is not approved for the Administration System.");
