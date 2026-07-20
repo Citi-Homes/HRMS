@@ -118,6 +118,7 @@ const pages = [
   { key: "inventory", label: "Office Inventory", table: "inventory" },
   { key: "vendors", label: "Vendor Database", table: "vendors" },
   { key: "tasks", label: "P&C Task Calendar", table: "tasks" },
+  { key: "hierarchy", label: "Hierarchy" },
   { key: "access_control", label: "Access Control" }
 ];
 
@@ -132,7 +133,8 @@ const columns = {
   utilities: ["utility", "vendor", "invoice_date", "due_date", "amount", "status", "reminder_sent"],
   inventory: ["item", "category", "quantity", "location", "responsible_person", "condition"],
   vendors: ["vendor", "service", "contact_person", "mobile", "contract_status", "renewal_date"],
-  tasks: ["task", "frequency", "due_date", "status", "remarks"]
+  tasks: ["task", "frequency", "due_date", "status", "remarks"],
+  employee_hierarchy: ["manager_name", "manager_email", "visibility_scope", "employee_name", "employee_id", "employee_email", "department", "is_active", "notes"]
 };
 
 const options = {
@@ -144,7 +146,8 @@ const options = {
   contract_status: ["Active", "Pending", "Expired", "Renewal"],
   reminder_sent: ["No", "Yes"],
   leave_type: ["Annual Leave", "Sick Leave", "Work From Home", "Emergency Leave"],
-  approval_status: ["Pending", "Approved", "Rejected"]
+  approval_status: ["Pending", "Approved", "Rejected"],
+  visibility_scope: ["Own Record Only", "Juniors Only", "Department", "All Records", "Custom Selected Employees"]
 };
 
 const displayNames = {
@@ -183,6 +186,11 @@ function displayNameForEmail(email = "") {
   return displayNames[normalized] || normalized || "Admin";
 }
 
+
+function currentProfileName() {
+  return state.portalUser?.team_member_name || displayNameForEmail(normalizedEmail());
+}
+
 function normalizedEmail() {
   return String(state.session?.user?.email || "").toLowerCase();
 }
@@ -209,19 +217,24 @@ function canEdit() {
 
 function canViewTable(table) {
   if (isSuperUser()) return true;
+  if (table === "employee_hierarchy") return false;
   const permissions = {
     employees: "can_view_employee_master",
     recruitment: "can_view_recruitment",
     interview_evaluation: "can_view_recruitment",
     joining_checklist: "can_view_employee_master",
     leave_management: "can_manage_leave",
+    documents: "can_view_employee_master",
     vendors: "can_manage_vendors",
     inventory: "can_manage_inventory",
-    pantry: "can_manage_pantry"
+    pantry: "can_manage_pantry",
+    utilities: "can_manage_vendors",
+    tasks: "can_manage_leave"
   };
   const permission = permissions[table];
   return permission ? Boolean(state.portalUser?.[permission]) : false;
 }
+
 
 function canEditTable(table) {
   if (table === "employees") return isSuperUser();
@@ -244,11 +257,12 @@ function canRequestLeave() {
 }
 
 function canViewPage(page) {
-  if (page.key === "access_control") return isSuperUser();
+  if (page.key === "access_control" || page.key === "hierarchy") return isSuperUser();
   if (page.key === "attendance") return canViewAttendancePortal();
   if (page.table) return canViewTable(page.table);
   return true;
 }
+
 
 function csvCell(value) {
   const text = String(value ?? "");
@@ -280,11 +294,18 @@ async function verifyPortalAccess() {
   const email = normalizedEmail();
   if (!email) throw new Error("Unable to identify the signed-in account.");
   const { data: rpcData, error: rpcError } = await client.rpc("get_my_admin_portal_user");
-  if (!rpcError && Array.isArray(rpcData) && rpcData.length) return rpcData[0];
+  if (!rpcError && Array.isArray(rpcData) && rpcData.length) {
+    const { data: fullProfile } = await client
+      .from("admin_portal_users")
+      .select("*")
+      .eq("email", email)
+      .maybeSingle();
+    return fullProfile || rpcData[0];
+  }
 
   const { data, error } = await client
     .from("admin_portal_users")
-    .select("email,role,access_level,is_active,can_manage_leave,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_vendors,can_manage_inventory,can_manage_pantry")
+    .select("*")
     .eq("email", email)
     .eq("is_active", true)
     .maybeSingle();
@@ -436,15 +457,147 @@ function renderDashboard() {
   `;
 }
 
+async function loadHierarchyData(options = {}) {
+  if (!options.force && state.rows.employee_hierarchy) return;
+  try {
+    state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
+  } catch (error) {
+    state.rows.employee_hierarchy = [];
+    console.warn("Unable to load hierarchy rules", error);
+  }
+}
+
+
+function activeHierarchyRows() {
+  return (state.rows.employee_hierarchy || []).filter((row) => row.is_active !== false && String(row.is_active) !== "false");
+}
+
+
+function hierarchyRulesForCurrentUser() {
+  const email = normalizedEmail();
+  const profileName = normalizePerson(currentProfileName());
+  return activeHierarchyRows().filter((row) => {
+    const managerEmail = String(row.manager_email || "").toLowerCase();
+    const managerName = normalizePerson(row.manager_name);
+    return managerEmail === email || (profileName && managerName === profileName);
+  });
+}
+
+
+function currentUserEmployee() {
+  const employees = state.rows.employees || [];
+  const email = normalizedEmail();
+  const profileName = currentProfileName();
+  const normalizedProfileName = normalizePerson(profileName);
+  return employees.find((employee) => {
+    const values = Object.entries(employee || {});
+    const emailMatch = values.some(([key, value]) => key.toLowerCase().includes("email") && String(value || "").toLowerCase() === email);
+    const nameMatch = normalizePerson(employee.name) === normalizedProfileName || normalizePerson(employeeDisplay(employee)).includes(normalizedProfileName);
+    return emailMatch || nameMatch;
+  }) || employeeForLeave(profileName) || employees[0] || null;
+}
+
+
+function employeeKeys(employee) {
+  if (!employee) return new Set();
+  return new Set([
+    normalizePerson(employee.employee_id),
+    normalizePerson(employee.name),
+    normalizePerson(employee.email),
+    normalizePerson(employee.work_email),
+    normalizePerson(employee.registered_email),
+    normalizePerson(employeeDisplay(employee))
+  ].filter(Boolean));
+}
+
+
+function rowPersonValue(table, row) {
+  if (table === "employees") return employeeDisplay(row);
+  if (["leave_management", "documents", "joining_checklist"].includes(table)) return row.employee;
+  if (table === "inventory") return row.responsible_person;
+  return "";
+}
+
+
+function rowMatchesEmployee(rowValue, allowedKeys) {
+  const key = normalizePerson(rowValue);
+  if (!key) return false;
+  if (allowedKeys.has(key)) return true;
+  return [...allowedKeys].some((allowed) => allowed && (key.includes(allowed) || allowed.includes(key)));
+}
+
+
+function hierarchyScopeForCurrentUser() {
+  if (isSuperUser()) return "All Records";
+  const rules = hierarchyRulesForCurrentUser();
+  const scopeOrder = ["Own Record Only", "Juniors Only", "Custom Selected Employees", "Department", "All Records"];
+  return rules.reduce((best, row) => {
+    const scope = row.visibility_scope || "Juniors Only";
+    return scopeOrder.indexOf(scope) > scopeOrder.indexOf(best) ? scope : best;
+  }, rules.length ? "Juniors Only" : "Own Record Only");
+}
+
+
+function allowedEmployeeKeysForCurrentUser() {
+  if (isSuperUser()) return null;
+  const keys = new Set();
+  const ownEmployee = currentUserEmployee();
+  employeeKeys(ownEmployee).forEach((key) => keys.add(key));
+  const profileName = normalizePerson(currentProfileName());
+  if (profileName) keys.add(profileName);
+  hierarchyRulesForCurrentUser().forEach((row) => {
+    [row.employee_id, row.employee_name, row.employee_email].forEach((value) => {
+      const key = normalizePerson(value);
+      if (key) keys.add(key);
+    });
+  });
+  return keys;
+}
+
+
+function rowVisibleByHierarchy(table, row) {
+  if (isSuperUser()) return true;
+  const personTables = ["employees", "leave_management", "documents", "joining_checklist", "inventory"];
+  if (!personTables.includes(table)) return true;
+  const scope = hierarchyScopeForCurrentUser();
+  if (scope === "All Records") return true;
+  const ownEmployee = currentUserEmployee();
+  if (scope === "Department") {
+    const ownDept = departmentGroup(ownEmployee?.department || state.portalUser?.department || "");
+    const rowDept = table === "employees" ? departmentGroup(row.department || "") : departmentGroup(row.department || employeeForLeave(rowPersonValue(table, row))?.department || "");
+    return ownDept && rowDept === ownDept;
+  }
+  const allowedKeys = allowedEmployeeKeysForCurrentUser();
+  return rowMatchesEmployee(rowPersonValue(table, row), allowedKeys);
+}
+
+
+function visibleEmployeeOptions() {
+  return (state.rows.employees || [])
+    .filter((employee) => rowVisibleByHierarchy("employees", employee))
+    .map((employee) => employeeDisplay(employee))
+    .filter(Boolean);
+}
+
+
+function canApproveLeaveRow(row) {
+  if (isSuperUser()) return true;
+  if (!canRequestLeave()) return false;
+  return rowVisibleByHierarchy("leave_management", row);
+}
+
+
 function filteredRows(page) {
   const rows = [...(state.rows[page.table] || [])];
   const search = state.search.trim().toLowerCase();
   return rows.filter((row) => {
+    const hierarchyOk = rowVisibleByHierarchy(page.table, row);
     const deptOk = page.key !== "employees" || state.activeFilter === "All" || departmentGroup(row.department) === state.activeFilter;
     const searchOk = !search || Object.values(row).join(" ").toLowerCase().includes(search);
-    return deptOk && searchOk;
+    return hierarchyOk && deptOk && searchOk;
   });
 }
+
 
 function parseAppDate(value) {
   if (!value) return null;
@@ -515,17 +668,9 @@ function leaveBalanceForEmployee(employeeValue, excludingId = null) {
 }
 
 function currentLeaveEmployee() {
-  const employees = state.rows.employees || [];
-  const email = normalizedEmail();
-  const profileName = displayNameForEmail(email);
-  const normalizedProfileName = normalizePerson(profileName);
-  return employees.find((employee) => {
-    const values = Object.entries(employee || {});
-    const emailMatch = values.some(([key, value]) => key.toLowerCase().includes("email") && String(value || "").toLowerCase() === email);
-    const nameMatch = normalizePerson(employee.name) === normalizedProfileName || normalizePerson(employeeDisplay(employee)).includes(normalizedProfileName);
-    return emailMatch || nameMatch;
-  }) || employeeForLeave(profileName) || employees[0] || null;
+  return currentUserEmployee();
 }
+
 
 function leaveEntitlementForEmployee(employee) {
   const join = parseAppDate(employee?.joining_date);
@@ -606,8 +751,8 @@ const summaryEmployee = currentLeaveEmployee();
               <td><span class="view-only-pill">${escapeHtml(status)}</span></td>
               <td><span class="readonly-cell wide-text">${escapeHtml(row.remarks || "-")}</span></td>
               <td class="row-actions">
-                ${isSuperUser() && status !== "Approved" ? `<button type="button" class="save-button" data-approve-leave="${row.id}">Approve</button>` : ""}
-                ${isSuperUser() && status !== "Rejected" ? `<button type="button" class="danger" data-reject-leave="${row.id}">Reject</button>` : ""}
+                ${canApproveLeaveRow(row) && status !== "Approved" ? `<button type="button" class="save-button" data-approve-leave="${row.id}">Approve</button>` : ""}
+                ${canApproveLeaveRow(row) && status !== "Rejected" ? `<button type="button" class="danger" data-reject-leave="${row.id}">Reject</button>` : ""}
                 ${isSuperUser() ? `<button type="button" class="danger" data-delete-leave="${row.id}">Delete</button>` : `<span class="view-only-pill">View only</span>`}
               </td>
             </tr>
@@ -628,7 +773,7 @@ function renderLeaveForm() {
     return;
   }
   panel.hidden = false;
-  const employeeOptions = (state.rows.employees || []).map((employee) => employeeDisplay(employee)).filter(Boolean);
+  const employeeOptions = visibleEmployeeOptions();
   $("#recordForm").innerHTML = `
     <label>Employee<select data-field="employee" required>${employeeOptions.map((item) => `<option>${escapeHtml(item)}</option>`).join("")}</select></label>
     <label>Leave Category<select data-field="leave_type">${options.leave_type.map((item) => `<option>${item}</option>`).join("")}</select></label>
@@ -641,9 +786,9 @@ function renderLeaveForm() {
 }
 
 async function updateLeaveApproval(id, status) {
-  if (!isSuperUser()) throw new Error("Only the superuser can approve or reject leave requests.");
   const existing = (state.rows.leave_management || []).find((row) => String(row.id) === String(id));
   if (!existing) throw new Error("Leave request not found.");
+  if (!canApproveLeaveRow(existing)) throw new Error("You do not have permission to approve or reject this leave request.");
   const requestedDays = Number(existing.requested_days || daysBetweenInclusive(existing.start_date, existing.end_date));
   const isAnnual = String(existing.leave_type || "").toLowerCase() === "annual leave";
   const balance = leaveBalanceForEmployee(existing.employee, id);
@@ -925,6 +1070,120 @@ async function updateAccessProfile(row, button) {
 }
 
 
+function employeeOptionMarkup() {
+  return (state.rows.employees || []).map((employee) => {
+    const label = employeeDisplay(employee);
+    const payload = {
+      employee_id: employee.employee_id || "",
+      employee_name: employee.name || label,
+      employee_email: employee.email || employee.work_email || employee.registered_email || "",
+      department: employee.department || ""
+    };
+    return `<option value="${escapeHtml(label)}" data-payload="${escapeHtml(JSON.stringify(payload))}">${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+
+function hierarchyRowMarkup(row) {
+  return `
+    <tr data-hierarchy-id="${row.id || ""}">
+      <td><span class="readonly-cell wide-text">${escapeHtml(row.manager_name || "-")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(row.manager_email || "-")}</span></td>
+      <td><span class="view-only-pill">${escapeHtml(row.visibility_scope || "Juniors Only")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(row.employee_name || "-")}</span></td>
+      <td><span class="readonly-cell">${escapeHtml(row.employee_id || "-")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(row.department || "-")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(row.notes || "-")}</span></td>
+      <td><button type="button" class="danger" data-delete-hierarchy="${row.id}">Delete</button></td>
+    </tr>`;
+}
+
+
+async function renderHierarchyPage() {
+  if (!isSuperUser()) {
+    await showPage("dashboard");
+    return;
+  }
+  await loadTables(["employees"], { optional: true });
+  await loadHierarchyData({ force: true });
+  const profiles = await fetchAccessProfiles();
+  const activeRules = activeHierarchyRows();
+  $("#dashboard").hidden = true;
+  $("#tablePage").hidden = false;
+  $("#pageTitle").textContent = "Hierarchy";
+  setTopActions();
+  $("#summaryCards").innerHTML = `
+    ${metric("Hierarchy Rules", activeRules.length)}
+    ${metric("Managers", new Set(activeRules.map((row) => String(row.manager_email || row.manager_name || "").toLowerCase()).filter(Boolean)).size)}
+    ${metric("Assigned Employees", new Set(activeRules.map((row) => String(row.employee_id || row.employee_name || "").toLowerCase()).filter(Boolean)).size)}
+  `;
+  $("#pageTools").innerHTML = `<span class="viewer-notice">Superuser-only: this controls which people each user can see inside employee and leave records.</span>`;
+  const table = $("#dataTable");
+  table.className = "compact-table hierarchy-table";
+  table.innerHTML = activeRules.length ? `
+    <thead><tr><th>Manager</th><th>Manager Email</th><th>Scope</th><th>Assigned Employee</th><th>Employee ID</th><th>Department</th><th>Notes</th><th>Action</th></tr></thead>
+    <tbody>${activeRules.map(hierarchyRowMarkup).join("")}</tbody>
+  ` : `<tbody><tr><td class="empty-state">No hierarchy rules added yet.</td></tr></tbody>`;
+  const managerOptions = profiles.map((profile) => `<option value="${escapeHtml(profile.email || "")}" data-name="${escapeHtml(profile.team_member_name || displayNameForEmail(profile.email))}" data-id="${escapeHtml(profile.team_member_id || "")}">${escapeHtml(profile.team_member_name || profile.email)} - ${escapeHtml(profile.email || "")}</option>`).join("");
+  const panel = $("#addRecordPanel");
+  panel.hidden = false;
+  panel.open = true;
+  $("#recordForm").innerHTML = `
+    <label>Manager / Senior<select data-hierarchy-field="manager_email" required>${managerOptions}</select></label>
+    <label>Visibility Scope<select data-hierarchy-field="visibility_scope">${options.visibility_scope.map((item) => `<option>${item}</option>`).join("")}</select></label>
+    <label>Assigned Employee<select data-hierarchy-field="employee_ref">${employeeOptionMarkup()}</select></label>
+    <label>Notes<input data-hierarchy-field="notes" type="text" placeholder="Optional note"></label>
+    <button type="submit">Add Hierarchy Rule</button>
+  `;
+}
+
+
+function hierarchyFormPayload(form) {
+  const managerSelect = form.querySelector('[data-hierarchy-field="manager_email"]');
+  const employeeSelect = form.querySelector('[data-hierarchy-field="employee_ref"]');
+  const selectedManager = managerSelect?.selectedOptions?.[0];
+  const selectedEmployee = employeeSelect?.selectedOptions?.[0];
+  let employeePayload = {};
+  try { employeePayload = JSON.parse(selectedEmployee?.dataset.payload || "{}"); } catch { employeePayload = {}; }
+  return {
+    manager_email: String(managerSelect?.value || "").toLowerCase(),
+    manager_name: selectedManager?.dataset.name || "",
+    manager_employee_id: selectedManager?.dataset.id || "",
+    visibility_scope: form.querySelector('[data-hierarchy-field="visibility_scope"]')?.value || "Juniors Only",
+    employee_id: employeePayload.employee_id || "",
+    employee_name: employeePayload.employee_name || selectedEmployee?.value || "",
+    employee_email: employeePayload.employee_email || "",
+    department: employeePayload.department || "",
+    notes: form.querySelector('[data-hierarchy-field="notes"]')?.value.trim() || "",
+    is_active: true
+  };
+}
+
+
+async function createHierarchyRule(form) {
+  if (!isSuperUser()) throw new Error("Only the superuser can manage hierarchy.");
+  const payload = hierarchyFormPayload(form);
+  if (!payload.manager_email) throw new Error("Please select a manager/senior.");
+  if (!payload.employee_name && !["All Records", "Department", "Own Record Only"].includes(payload.visibility_scope)) {
+    throw new Error("Please select an assigned employee for this scope.");
+  }
+  const { error } = await client.from("employee_hierarchy").upsert(payload, { onConflict: "manager_email,employee_name,employee_id" });
+  if (error) throw error;
+  form.reset();
+  state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
+  await renderHierarchyPage();
+}
+
+
+async function deleteHierarchyRule(id) {
+  if (!isSuperUser()) throw new Error("Only the superuser can manage hierarchy.");
+  const { error } = await client.from("employee_hierarchy").delete().eq("id", id);
+  if (error) throw error;
+  state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
+  await renderHierarchyPage();
+}
+
+
 function renderTablePage(page) {
   $("#dashboard").hidden = true;
   $("#tablePage").hidden = false;
@@ -1070,10 +1329,12 @@ function renderForm(page) {
 async function loadPageData() {
   const tables = pages.filter((page) => page.table && canViewTable(page.table)).map((page) => page.table);
   await loadTables(tables, { force: true, optional: true });
+  await loadHierarchyData({ force: true });
 }
 
 async function loadTables(tables, options = {}) {
   const uniqueTables = [...new Set(tables)].filter((table) => isSuperUser() || canViewTable(table));
+  if (!state.rows.employee_hierarchy) await loadHierarchyData();
   await Promise.all(uniqueTables.map(async (table) => {
     if (!options.force && state.rows[table]) return;
     try {
@@ -1108,6 +1369,8 @@ async function showPage(key) {
     renderDashboard();
   } else if (page.key === "access_control") {
     await renderAccessControlPage();
+  } else if (page.key === "hierarchy") {
+    await renderHierarchyPage();
   } else {
     if (page.table === "leave_management") {
       await loadTables(["leave_management", "employees"], { optional: true });
@@ -1258,6 +1521,10 @@ document.addEventListener("click", async (event) => {
     }
     if (approveLeaveButton) await updateLeaveApproval(approveLeaveButton.dataset.approveLeave, "Approved");
     if (rejectLeaveButton) await updateLeaveApproval(rejectLeaveButton.dataset.rejectLeave, "Rejected");
+    if (event.target.closest("[data-delete-hierarchy]") && confirm("Delete this hierarchy rule?")) {
+      await deleteHierarchyRule(event.target.closest("[data-delete-hierarchy]").dataset.deleteHierarchy);
+      return;
+    }
     if (deleteLeaveButton && isSuperUser() && confirm("Delete this leave request?")) {
       await deleteRow("leave_management", deleteLeaveButton.dataset.deleteLeave);
       state.rows.leave_management = await fetchRows("leave_management");
@@ -1311,6 +1578,7 @@ $("#loginForm").addEventListener("submit", async (event) => {
   try {
     state.session = await signIn($("#username").value, $("#password").value);
     await loadDashboardData();
+    await loadHierarchyData();
     renderShell();
     renderDashboard();
   } catch (error) {
@@ -1351,6 +1619,10 @@ $("#recordForm").addEventListener("submit", async (event) => {
   const page = pages.find((item) => item.key === state.page);
   if (page.key === "access_control") {
     await createAccessProfile(event.currentTarget);
+    return;
+  }
+  if (page.key === "hierarchy") {
+    await createHierarchyRule(event.currentTarget);
     return;
   }
   if (page.table === "leave_management") {
@@ -1419,6 +1691,7 @@ document.addEventListener("change", async (event) => {
   if (state.session) {
     state.portalUser = await verifyPortalAccess();
     await loadDashboardData();
+    await loadHierarchyData();
     await showPage(state.page);
   }
   updateAbuDhabiTime();
