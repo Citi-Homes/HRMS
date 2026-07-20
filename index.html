@@ -438,9 +438,9 @@ function renderDashboard() {
   $("#pageTitle").textContent = "Dashboard";
   setTopActions();
 
-  const employeeCount = (state.rows.employees || []).length;
+  const employeeCount = (state.rows.employees || []).filter((row) => rowVisibleByHierarchy("employees", row)).length;
   const recruitmentOpen = (state.rows.recruitment || []).filter((row) => !["Joined", "Rejected"].includes(row.status)).length;
-  const documentsDue = (state.rows.documents || []).filter((row) => row.status !== "Valid").length;
+  const documentsDue = (state.rows.documents || []).filter((row) => rowVisibleByHierarchy("documents", row) && row.status !== "Valid").length;
   const utilityBillCount = (state.rows.utilities || []).length;
 
   $("#dashboard").innerHTML = `
