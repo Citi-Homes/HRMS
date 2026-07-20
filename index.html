@@ -693,21 +693,42 @@ async function fetchAccessProfiles() {
   return data || [];
 }
 
+function accessLevelOption(value, selectedLevel) {
+  return `<option${value === selectedLevel ? " selected" : ""}>${escapeHtml(value)}</option>`;
+}
+
+function selectedAccessLevel(profile) {
+  if (profile.role === "Super User" || profile.role === "Admin") return profile.role;
+  if (profile.access_level === "Customized Level") return "Customized Level";
+  return "Viewer";
+}
+
 function accessProfileRow(profile) {
-  const granted = accessPermissionFields.filter((item) => profile[item.key]).map((item) => item.label).join(", ") || "No module access";
+  const email = String(profile.email || "").toLowerCase();
+  const selectedLevel = selectedAccessLevel(profile);
   return `
-    <tr>
+    <tr data-access-email="${escapeHtml(email)}">
       <td><span class="readonly-cell">${escapeHtml(profile.team_member_id || "-")}</span></td>
       <td><span class="readonly-cell wide-text">${escapeHtml(profile.team_member_name || "-")}</span></td>
-      <td><span class="readonly-cell wide-text">${escapeHtml(profile.email || "-")}</span></td>
-      <td><span class="view-only-pill">${escapeHtml(profile.role || "Viewer")}</span></td>
-      <td><span class="readonly-cell wide-text">${escapeHtml(profile.access_level || profile.role || "Viewer")}</span></td>
-      <td><span class="readonly-cell wide-text">${escapeHtml(granted)}</span></td>
-      <td><span class="view-only-pill">${profile.is_active === false ? "Inactive" : "Active"}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(email || "-")}</span></td>
+      <td>
+        <select data-existing-access-field="role" class="table-select">
+          ${["Viewer", "Admin", "Customized Level", "Super User"].map((level) => accessLevelOption(level, selectedLevel)).join("")}
+        </select>
+      </td>
+      <td><input data-existing-access-field="access_level" class="table-input wide-text" type="text" value="${escapeHtml(profile.access_level || selectedLevel)}"></td>
+      <td>
+        <div class="access-check-grid table-access-grid">
+          ${accessPermissionFields.map((item) => `
+            <label class="access-check"><input data-existing-access-permission="${item.key}" type="checkbox"${profile[item.key] ? " checked" : ""}>${item.label}</label>
+          `).join("")}
+        </div>
+      </td>
+      <td><label class="access-check"><input data-existing-access-field="is_active" type="checkbox"${profile.is_active === false ? "" : " checked"}>Active</label></td>
+      <td><button type="button" class="mini-action" data-save-access>Save Access</button></td>
     </tr>
   `;
 }
-
 async function renderAccessControlPage() {
   if (!isSuperUser()) {
     await showPage("dashboard");
@@ -729,7 +750,7 @@ async function renderAccessControlPage() {
   const table = $("#dataTable");
   table.className = "compact-table access-control-table";
   table.innerHTML = profiles.length ? `
-    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Access Level</th><th>Access Links</th><th>Status</th></tr></thead>
+    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Access Level</th><th>Access Links</th><th>Status</th><th>Action</th></tr></thead>
     <tbody>${profiles.map(accessProfileRow).join("")}</tbody>
   ` : `<tbody><tr><td class="empty-state">No access profiles found.</td></tr></tbody>`;
 
@@ -781,6 +802,36 @@ function accessFormPayload(form) {
   return payload;
 }
 
+function applyExistingAccessLevelDefaults(row) {
+  if (!row) return;
+  const selectedLevel = row.querySelector('[data-existing-access-field="role"]')?.value || "Viewer";
+  const defaults = defaultAccessForRole(selectedLevel);
+  accessPermissionFields.forEach((item) => {
+    const checkbox = row.querySelector(`[data-existing-access-permission="${item.key}"]`);
+    if (!checkbox) return;
+    if (selectedLevel === "Customized Level") return;
+    checkbox.checked = Boolean(defaults[item.key]);
+  });
+  const description = row.querySelector('[data-existing-access-field="access_level"]');
+  if (description && (!description.value || ["Viewer", "Admin", "Super User", "Customized Level"].includes(description.value))) {
+    description.value = selectedLevel;
+  }
+}
+
+function existingAccessPayload(row) {
+  const selectedLevel = row.querySelector('[data-existing-access-field="role"]')?.value || "Viewer";
+  const storedRole = selectedLevel === "Customized Level" ? "Viewer" : selectedLevel;
+  const payload = {
+    email: row.dataset.accessEmail,
+    role: storedRole,
+    access_level: row.querySelector('[data-existing-access-field="access_level"]')?.value.trim() || selectedLevel,
+    is_active: Boolean(row.querySelector('[data-existing-access-field="is_active"]')?.checked)
+  };
+  accessPermissionFields.forEach((item) => {
+    payload[item.key] = selectedLevel === "Super User" ? true : Boolean(row.querySelector(`[data-existing-access-permission="${item.key}"]`)?.checked);
+  });
+  return payload;
+}
 async function createAccessProfile(form) {
   if (!isSuperUser()) throw new Error("Only the superuser can create access profiles.");
   const message = $("#accessControlMessage");
@@ -814,6 +865,30 @@ async function createAccessProfile(form) {
   if (message) message.textContent = `${authMessage} Access profile is active for ${payload.email}.`;
   form.reset();
   await renderAccessControlPage();
+}
+
+async function updateAccessProfile(row, button) {
+  if (!isSuperUser()) throw new Error("Only the superuser can update access profiles.");
+  const payload = existingAccessPayload(row);
+  if (!payload.email) throw new Error("Unable to identify the selected member.");
+  if (payload.email === normalizedEmail() && payload.role !== "Super User") {
+    throw new Error("You cannot remove your own Super User access while signed in.");
+  }
+  const originalText = button?.textContent || "Save Access";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving...";
+  }
+  const { error } = await client.from("admin_portal_users").upsert(payload, { onConflict: "email" });
+  if (error) throw error;
+  if (button) {
+    button.textContent = "Saved";
+    window.setTimeout(() => { button.disabled = false; button.textContent = originalText; }, 900);
+  }
+  if (payload.email === normalizedEmail()) {
+    state.portalUser = { ...(state.portalUser || {}), ...payload };
+    renderNav();
+  }
 }
 
 
@@ -1128,6 +1203,7 @@ async function importTableFile(table, file) {
 document.addEventListener("click", async (event) => {
   const pageButton = event.target.closest("[data-page]");
   const filterButton = event.target.closest("[data-filter]");
+  const accessButton = event.target.closest("[data-save-access]");
   const saveButton = event.target.closest("[data-save]");
   const deleteButton = event.target.closest("[data-delete]");
   const importButton = event.target.closest("[data-import]");
@@ -1139,6 +1215,10 @@ document.addEventListener("click", async (event) => {
   const deleteLeaveButton = event.target.closest("[data-delete-leave]");
 
   try {
+    if (accessButton) {
+      await updateAccessProfile(accessButton.closest("tr"), accessButton);
+      return;
+    }
     if (approveLeaveButton) await updateLeaveApproval(approveLeaveButton.dataset.approveLeave, "Approved");
     if (rejectLeaveButton) await updateLeaveApproval(rejectLeaveButton.dataset.rejectLeave, "Rejected");
     if (deleteLeaveButton && isSuperUser() && confirm("Delete this leave request?")) {
@@ -1262,6 +1342,10 @@ $("#recordForm").addEventListener("submit", async (event) => {
 document.addEventListener("change", async (event) => {
   if (event.target.matches('[data-access-field="role"]')) {
     applyAccessLevelDefaults(event.target.closest("form"));
+    return;
+  }
+  if (event.target.matches('[data-existing-access-field="role"]')) {
+    applyExistingAccessLevelDefaults(event.target.closest("tr"));
     return;
   }
   if (event.target.id !== "recruitmentImportFile") return;
