@@ -657,8 +657,27 @@ const accessPermissionFields = [
 ];
 
 function defaultAccessForRole(role) {
-  const superAccess = role === "Super User";
-  return Object.fromEntries(accessPermissionFields.map((item) => [item.key, superAccess]));
+  const access = Object.fromEntries(accessPermissionFields.map((item) => [item.key, false]));
+  if (role === "Super User" || role === "Admin") {
+    accessPermissionFields.forEach((item) => { access[item.key] = true; });
+  }
+  return access;
+}
+
+function applyAccessLevelDefaults(form) {
+  if (!form) return;
+  const selectedLevel = form.querySelector('[data-access-field="role"]')?.value || "Viewer";
+  const defaults = defaultAccessForRole(selectedLevel);
+  accessPermissionFields.forEach((item) => {
+    const checkbox = form.querySelector(`[data-access-permission="${item.key}"]`);
+    if (!checkbox) return;
+    if (selectedLevel === "Customized Level") return;
+    checkbox.checked = Boolean(defaults[item.key]);
+  });
+  const description = form.querySelector('[data-access-field="access_level"]');
+  if (description && (!description.value || ["Viewer", "Admin", "Super User", "Customized Level"].includes(description.value))) {
+    description.value = selectedLevel;
+  }
 }
 
 async function fetchAccessProfiles() {
@@ -682,6 +701,7 @@ function accessProfileRow(profile) {
       <td><span class="readonly-cell wide-text">${escapeHtml(profile.team_member_name || "-")}</span></td>
       <td><span class="readonly-cell wide-text">${escapeHtml(profile.email || "-")}</span></td>
       <td><span class="view-only-pill">${escapeHtml(profile.role || "Viewer")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(profile.access_level || profile.role || "Viewer")}</span></td>
       <td><span class="readonly-cell wide-text">${escapeHtml(granted)}</span></td>
       <td><span class="view-only-pill">${profile.is_active === false ? "Inactive" : "Active"}</span></td>
     </tr>
@@ -709,7 +729,7 @@ async function renderAccessControlPage() {
   const table = $("#dataTable");
   table.className = "compact-table access-control-table";
   table.innerHTML = profiles.length ? `
-    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Access Links</th><th>Status</th></tr></thead>
+    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Access Level</th><th>Access Links</th><th>Status</th></tr></thead>
     <tbody>${profiles.map(accessProfileRow).join("")}</tbody>
   ` : `<tbody><tr><td class="empty-state">No access profiles found.</td></tr></tbody>`;
 
@@ -725,6 +745,7 @@ async function renderAccessControlPage() {
       <select data-access-field="role">
         <option>Viewer</option>
         <option>Admin</option>
+        <option>Customized Level</option>
         <option>Super User</option>
       </select>
     </label>
@@ -738,22 +759,24 @@ async function renderAccessControlPage() {
     <button type="submit">Create Profile</button>
     <p id="accessControlMessage" class="form-message"></p>
   `;
+  applyAccessLevelDefaults($("#recordForm"));
 }
 
 function accessFormPayload(form) {
-  const role = form.querySelector('[data-access-field="role"]')?.value || "Viewer";
+  const selectedLevel = form.querySelector('[data-access-field="role"]')?.value || "Viewer";
+  const storedRole = selectedLevel === "Customized Level" ? "Viewer" : selectedLevel;
   const payload = {
     team_member_id: form.querySelector('[data-access-field="team_member_id"]')?.value.trim(),
     team_member_name: form.querySelector('[data-access-field="team_member_name"]')?.value.trim(),
     email: form.querySelector('[data-access-field="email"]')?.value.trim().toLowerCase(),
     password: form.querySelector('[data-access-field="password"]')?.value || "abc123",
-    role,
-    access_level: form.querySelector('[data-access-field="access_level"]')?.value.trim() || role,
+    role: storedRole,
+    access_level: form.querySelector('[data-access-field="access_level"]')?.value.trim() || selectedLevel,
     is_active: Boolean(form.querySelector('[data-access-field="is_active"]')?.checked)
   };
-  const defaults = defaultAccessForRole(role);
+  const defaults = defaultAccessForRole(selectedLevel);
   accessPermissionFields.forEach((item) => {
-    payload[item.key] = role === "Super User" ? true : Boolean(form.querySelector(`[data-access-permission="${item.key}"]`)?.checked || defaults[item.key]);
+    payload[item.key] = selectedLevel === "Super User" ? true : Boolean(form.querySelector(`[data-access-permission="${item.key}"]`)?.checked || defaults[item.key]);
   });
   return payload;
 }
@@ -1237,6 +1260,10 @@ $("#recordForm").addEventListener("submit", async (event) => {
 });
 
 document.addEventListener("change", async (event) => {
+  if (event.target.matches('[data-access-field="role"]')) {
+    applyAccessLevelDefaults(event.target.closest("form"));
+    return;
+  }
   if (event.target.id !== "recruitmentImportFile") return;
   const file = event.target.files?.[0];
   if (!file) return;
