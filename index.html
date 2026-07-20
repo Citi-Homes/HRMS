@@ -117,7 +117,8 @@ const pages = [
   { key: "utilities", label: "Utility Bills", table: "utilities" },
   { key: "inventory", label: "Office Inventory", table: "inventory" },
   { key: "vendors", label: "Vendor Database", table: "vendors" },
-  { key: "tasks", label: "P&C Task Calendar", table: "tasks" }
+  { key: "tasks", label: "P&C Task Calendar", table: "tasks" },
+  { key: "access_control", label: "Access Control" }
 ];
 
 const columns = {
@@ -225,6 +226,7 @@ function canRequestLeave() {
 }
 
 function canViewPage(page) {
+  if (page.key === "access_control") return isSuperUser();
   return page.key !== "attendance" || canViewAttendancePortal();
 }
 
@@ -644,6 +646,150 @@ async function updateLeaveApproval(id, status) {
 }
 
 
+const accessPermissionFields = [
+  { key: "can_view_attendance", label: "Attendance Portal" },
+  { key: "can_view_employee_master", label: "Employee Master" },
+  { key: "can_view_recruitment", label: "Recruitment Tracker" },
+  { key: "can_manage_leave", label: "Leave Management" },
+  { key: "can_manage_vendors", label: "Vendor Database" },
+  { key: "can_manage_inventory", label: "Office Inventory" },
+  { key: "can_manage_pantry", label: "Pantry Management" }
+];
+
+function defaultAccessForRole(role) {
+  const superAccess = role === "Super User";
+  return Object.fromEntries(accessPermissionFields.map((item) => [item.key, superAccess]));
+}
+
+async function fetchAccessProfiles() {
+  const { data, error } = await client
+    .from("admin_portal_users")
+    .select("team_member_id,team_member_name,email,role,access_level,is_active,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_leave,can_manage_vendors,can_manage_inventory,can_manage_pantry")
+    .order("team_member_name", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+function accessProfileRow(profile) {
+  const granted = accessPermissionFields.filter((item) => profile[item.key]).map((item) => item.label).join(", ") || "No module access";
+  return `
+    <tr>
+      <td><span class="readonly-cell">${escapeHtml(profile.team_member_id || "-")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(profile.team_member_name || "-")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(profile.email || "-")}</span></td>
+      <td><span class="view-only-pill">${escapeHtml(profile.role || "Viewer")}</span></td>
+      <td><span class="readonly-cell wide-text">${escapeHtml(granted)}</span></td>
+      <td><span class="view-only-pill">${profile.is_active === false ? "Inactive" : "Active"}</span></td>
+    </tr>
+  `;
+}
+
+async function renderAccessControlPage() {
+  if (!isSuperUser()) {
+    await showPage("dashboard");
+    return;
+  }
+  $("#dashboard").hidden = true;
+  $("#tablePage").hidden = false;
+  $("#pageTitle").textContent = "Access Control";
+  setTopActions();
+
+  const profiles = await fetchAccessProfiles();
+  $("#summaryCards").innerHTML = `
+    ${metric("Active Profiles", profiles.filter((profile) => profile.is_active !== false).length)}
+    ${metric("Superusers", profiles.filter((profile) => profile.role === "Super User").length)}
+    ${metric("Limited Users", profiles.filter((profile) => profile.role !== "Super User").length)}
+  `;
+  $("#pageTools").innerHTML = `<span class="viewer-notice">Superuser-only tab. Create login profile, choose access level, and assign app permissions from one place.</span>`;
+
+  const table = $("#dataTable");
+  table.className = "compact-table access-control-table";
+  table.innerHTML = profiles.length ? `
+    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Access Links</th><th>Status</th></tr></thead>
+    <tbody>${profiles.map(accessProfileRow).join("")}</tbody>
+  ` : `<tbody><tr><td class="empty-state">No access profiles found.</td></tr></tbody>`;
+
+  const panel = $("#addRecordPanel");
+  panel.hidden = false;
+  panel.open = true;
+  $("#recordForm").innerHTML = `
+    <label>Team Member ID<input data-access-field="team_member_id" type="text" placeholder="CH8" required></label>
+    <label>Team Member Name<input data-access-field="team_member_name" type="text" placeholder="Full name" required></label>
+    <label>Registered Email<input data-access-field="email" type="email" placeholder="name@citihomes.ae" required></label>
+    <label>Temporary Password<input data-access-field="password" type="text" value="abc123" required></label>
+    <label>Access Level
+      <select data-access-field="role">
+        <option>Viewer</option>
+        <option>Admin</option>
+        <option>Super User</option>
+      </select>
+    </label>
+    <label>Access Description<input data-access-field="access_level" type="text" placeholder="Limited access to selected modules"></label>
+    <div class="access-check-grid">
+      ${accessPermissionFields.map((item) => `
+        <label class="access-check"><input data-access-permission="${item.key}" type="checkbox">${item.label}</label>
+      `).join("")}
+    </div>
+    <label class="access-check"><input data-access-field="is_active" type="checkbox" checked>Active profile</label>
+    <button type="submit">Create Profile</button>
+    <p id="accessControlMessage" class="form-message"></p>
+  `;
+}
+
+function accessFormPayload(form) {
+  const role = form.querySelector('[data-access-field="role"]')?.value || "Viewer";
+  const payload = {
+    team_member_id: form.querySelector('[data-access-field="team_member_id"]')?.value.trim(),
+    team_member_name: form.querySelector('[data-access-field="team_member_name"]')?.value.trim(),
+    email: form.querySelector('[data-access-field="email"]')?.value.trim().toLowerCase(),
+    password: form.querySelector('[data-access-field="password"]')?.value || "abc123",
+    role,
+    access_level: form.querySelector('[data-access-field="access_level"]')?.value.trim() || role,
+    is_active: Boolean(form.querySelector('[data-access-field="is_active"]')?.checked)
+  };
+  const defaults = defaultAccessForRole(role);
+  accessPermissionFields.forEach((item) => {
+    payload[item.key] = role === "Super User" ? true : Boolean(form.querySelector(`[data-access-permission="${item.key}"]`)?.checked || defaults[item.key]);
+  });
+  return payload;
+}
+
+async function createAccessProfile(form) {
+  if (!isSuperUser()) throw new Error("Only the superuser can create access profiles.");
+  const message = $("#accessControlMessage");
+  if (message) message.textContent = "Creating profile...";
+  const payload = accessFormPayload(form);
+  if (!payload.team_member_id || !payload.team_member_name || !payload.email || !payload.password) {
+    throw new Error("Please fill Team Member ID, Name, Email and Password.");
+  }
+
+  const currentSession = state.session;
+  let authMessage = "Login account created.";
+  const { error: signUpError } = await client.auth.signUp({
+    email: payload.email,
+    password: payload.password,
+    options: { data: { display_name: payload.team_member_name, team_member_id: payload.team_member_id } }
+  });
+  if (signUpError && !String(signUpError.message || "").toLowerCase().includes("already")) {
+    authMessage = `Profile saved, but login account needs Supabase user check: ${signUpError.message}`;
+  } else if (signUpError) {
+    authMessage = "Profile saved. Login account already exists.";
+  }
+  if (currentSession?.access_token && currentSession?.refresh_token) {
+    await client.auth.setSession({ access_token: currentSession.access_token, refresh_token: currentSession.refresh_token });
+    state.session = currentSession;
+  }
+
+  const profilePayload = { ...payload };
+  delete profilePayload.password;
+  const { error } = await client.from("admin_portal_users").upsert(profilePayload, { onConflict: "email" });
+  if (error) throw error;
+  if (message) message.textContent = `${authMessage} Access profile is active for ${payload.email}.`;
+  form.reset();
+  await renderAccessControlPage();
+}
+
+
 function renderTablePage(page) {
   $("#dashboard").hidden = true;
   $("#tablePage").hidden = false;
@@ -821,6 +967,8 @@ async function showPage(key) {
   if (page.key === "dashboard") {
     await loadDashboardData();
     renderDashboard();
+  } else if (page.key === "access_control") {
+    await renderAccessControlPage();
   } else {
     if (page.table === "leave_management") {
       await loadTables(["leave_management", "employees"]);
@@ -1049,6 +1197,10 @@ $("#globalSearch").addEventListener("input", async (event) => {
 $("#recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const page = pages.find((item) => item.key === state.page);
+  if (page.key === "access_control") {
+    await createAccessProfile(event.currentTarget);
+    return;
+  }
   if (page.table === "leave_management") {
     if (!canRequestLeave()) throw new Error("You do not have permission to submit leave requests.");
     const row = rowFromElement(event.currentTarget);
