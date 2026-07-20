@@ -879,8 +879,18 @@ async function updateAccessProfile(row, button) {
     button.disabled = true;
     button.textContent = "Saving...";
   }
-  const { error } = await client.from("admin_portal_users").upsert(payload, { onConflict: "email" });
-  if (error) throw error;
+  const rpcPayload = {
+    p_email: payload.email,
+    p_role: payload.role,
+    p_access_level: payload.access_level,
+    p_is_active: payload.is_active
+  };
+  accessPermissionFields.forEach((item) => { rpcPayload[`p_${item.key}`] = payload[item.key]; });
+  const { error: rpcError } = await client.rpc("update_admin_portal_user_access", rpcPayload);
+  if (rpcError) {
+    const { error } = await client.from("admin_portal_users").update(payload).eq("email", payload.email);
+    if (error) throw new Error(rpcError.message || error.message);
+  }
   if (button) {
     button.textContent = "Saved";
     window.setTimeout(() => { button.disabled = false; button.textContent = originalText; }, 900);
