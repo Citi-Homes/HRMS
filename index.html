@@ -494,7 +494,7 @@ function currentUserEmployee() {
     const emailMatch = values.some(([key, value]) => key.toLowerCase().includes("email") && String(value || "").toLowerCase() === email);
     const nameMatch = normalizePerson(employee.name) === normalizedProfileName || normalizePerson(employeeDisplay(employee)).includes(normalizedProfileName);
     return emailMatch || nameMatch;
-  }) || employeeForLeave(profileName) || employees[0] || null;
+  }) || employeeForLeave(profileName) || (isSuperUser() ? employees[0] : null);
 }
 
 
