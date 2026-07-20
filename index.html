@@ -1314,8 +1314,15 @@ $("#loginForm").addEventListener("submit", async (event) => {
     renderShell();
     renderDashboard();
   } catch (error) {
-    const detail = error?.message || error?.error_description || error?.details || (typeof error === "string" ? error : "Login failed. Please check access and try again.");
-    $("#loginMessage").textContent = detail;
+    const errorParts = [];
+    if (error?.message) errorParts.push(error.message);
+    if (error?.error_description) errorParts.push(error.error_description);
+    if (error?.details) errorParts.push(error.details);
+    if (error?.hint) errorParts.push(error.hint);
+    const props = Object.getOwnPropertyNames(error || {}).filter((key) => !["stack"].includes(key)).map((key) => `${key}: ${String(error[key])}`);
+    if (props.length) errorParts.push(props.join(" | "));
+    if (!errorParts.length && typeof error === "string") errorParts.push(error);
+    $("#loginMessage").textContent = errorParts.join(" - ") || "Login failed. Please check access and try again.";
   }
 });
 
