@@ -662,11 +662,15 @@ function defaultAccessForRole(role) {
 }
 
 async function fetchAccessProfiles() {
+  const profileColumns = "team_member_id,team_member_name,email,role,access_level,is_active,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_leave,can_manage_vendors,can_manage_inventory,can_manage_pantry";
+  const rpcResult = await client.rpc("get_admin_portal_users_for_superuser");
+  if (!rpcResult.error && Array.isArray(rpcResult.data)) return rpcResult.data;
+
   const { data, error } = await client
     .from("admin_portal_users")
-    .select("team_member_id,team_member_name,email,role,access_level,is_active,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_leave,can_manage_vendors,can_manage_inventory,can_manage_pantry")
-    .order("team_member_name", { ascending: true });
-  if (error) throw error;
+    .select(profileColumns)
+    .order("email", { ascending: true });
+  if (error) throw new Error(rpcResult.error?.message || error.message);
   return data || [];
 }
 
