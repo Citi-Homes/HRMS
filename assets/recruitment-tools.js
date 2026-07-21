@@ -206,3 +206,96 @@
   window.addEventListener("load", function () { window.setTimeout(checkFirstLoginPassword, 1200); });
   new MutationObserver(function () { window.setTimeout(checkFirstLoginPassword, 300); }).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+
+// First-login password screen polish: show password and reliable save handler.
+(function () {
+  function getClient() {
+    var cfg = window.CITI_HOMES_SUPABASE || {};
+    if (!window.supabase || !cfg.url || !cfg.anonKey) return null;
+    return window.supabase.createClient(cfg.url, cfg.anonKey);
+  }
+
+  function setMessage(text, isError) {
+    var message = document.getElementById("firstLoginMessage");
+    if (!message) return;
+    message.style.color = isError ? "#b13b2f" : "#4f6f48";
+    message.textContent = text;
+  }
+
+  async function saveFirstLoginPassword(event) {
+    var form = event.target;
+    if (!form || !form.closest || !form.closest("#firstLoginPasswordOverlay")) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    var client = getClient();
+    var passwordInput = document.getElementById("firstLoginPassword");
+    var confirmInput = document.getElementById("firstLoginConfirm");
+    var submitButton = form.querySelector('button[type="submit"]');
+    var password = passwordInput ? passwordInput.value : "";
+    var confirm = confirmInput ? confirmInput.value : "";
+
+    if (!client) return setMessage("Secure connection is not ready. Please refresh and try again.", true);
+    if (!password || password.length < 8) return setMessage("Password must be at least 8 characters.", true);
+    if (password !== confirm) return setMessage("New password and confirm password must match.", true);
+
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Saving...";
+    }
+    setMessage("Saving your password...", false);
+
+    try {
+      var updateResult = await client.auth.updateUser({ password: password });
+      if (updateResult && updateResult.error) throw updateResult.error;
+      var completeResult = await client.rpc("complete_my_first_login_password_change");
+      if (completeResult && completeResult.error) throw completeResult.error;
+      setMessage("Password saved. Opening HRMS...", false);
+      window.setTimeout(function () { window.location.reload(); }, 900);
+    } catch (error) {
+      setMessage((error && error.message) ? error.message : "Password could not be saved. Please try again.", true);
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Save Password";
+      }
+    }
+  }
+
+  function addPasswordToggle() {
+    var overlay = document.getElementById("firstLoginPasswordOverlay");
+    var passwordInput = document.getElementById("firstLoginPassword");
+    var confirmInput = document.getElementById("firstLoginConfirm");
+    if (!overlay || !passwordInput || !confirmInput) return;
+
+    if (!document.getElementById("firstLoginPasswordPatchStyle")) {
+      var style = document.createElement("style");
+      style.id = "firstLoginPasswordPatchStyle";
+      style.textContent = '.first-login-show-row{display:flex!important;align-items:center;gap:10px;margin:4px 0 14px;color:#343331;font-weight:700}.first-login-show-row input{width:18px!important;height:18px!important;accent-color:#6f7e58}.first-login-card button[disabled]{opacity:.68;cursor:wait}';
+      document.head.appendChild(style);
+    }
+
+    if (!document.getElementById("firstLoginShowPassword")) {
+      var note = overlay.querySelector(".first-login-note");
+      var row = document.createElement("label");
+      row.className = "first-login-show-row";
+      row.innerHTML = '<input id="firstLoginShowPassword" type="checkbox"><span>Show password</span>';
+      if (note && note.parentNode) note.parentNode.insertBefore(row, note);
+      else overlay.querySelector("form").appendChild(row);
+      row.querySelector("input").addEventListener("change", function () {
+        var nextType = this.checked ? "text" : "password";
+        passwordInput.type = nextType;
+        confirmInput.type = nextType;
+      });
+    }
+
+    var form = overlay.querySelector("form");
+    if (form && form.dataset.firstLoginPatched !== "true") {
+      form.dataset.firstLoginPatched = "true";
+      form.addEventListener("submit", saveFirstLoginPassword, true);
+    }
+  }
+
+  window.addEventListener("load", function () { window.setTimeout(addPasswordToggle, 500); });
+  new MutationObserver(addPasswordToggle).observe(document.documentElement, { childList: true, subtree: true });
+})();
