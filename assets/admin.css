@@ -2051,3 +2051,58 @@ td:nth-child(5) select {
   overflow-wrap: normal !important;
   word-break: normal !important;
 }
+
+
+
+/* Access Control fit-to-screen refinement */
+.access-control-table {
+  width: 100% !important;
+  min-width: 960px !important;
+  table-layout: fixed !important;
+}
+
+.access-control-table th:nth-child(1),
+.access-control-table td:nth-child(1) { width: 40px !important; }
+.access-control-table th:nth-child(2),
+.access-control-table td:nth-child(2) { width: 118px !important; }
+.access-control-table th:nth-child(3),
+.access-control-table td:nth-child(3) { width: 168px !important; }
+.access-control-table th:nth-child(4),
+.access-control-table td:nth-child(4) { width: 132px !important; }
+.access-control-table th:nth-child(5),
+.access-control-table td:nth-child(5) { width: 142px !important; }
+.access-control-table th:nth-child(6),
+.access-control-table td:nth-child(6) { width: 286px !important; }
+.access-control-table th:nth-child(7),
+.access-control-table td:nth-child(7) { width: 58px !important; }
+.access-control-table th:nth-child(8),
+.access-control-table td:nth-child(8) { width: 92px !important; }
+
+.access-control-table .table-access-grid {
+  grid-template-columns: repeat(3, minmax(78px, 1fr)) !important;
+  gap: 0.2rem 0.22rem !important;
+}
+
+.access-control-table .table-access-grid .access-check {
+  gap: 0.22rem !important;
+  min-height: 22px !important;
+  padding: 0.08rem 0 !important;
+  font-size: 0.56rem !important;
+  line-height: 1.02 !important;
+}
+
+.access-control-table .table-access-grid .access-check input[type="checkbox"] {
+  flex-basis: 12px !important;
+  width: 12px !important;
+  min-width: 12px !important;
+  max-width: 12px !important;
+  height: 12px !important;
+  min-height: 12px !important;
+  max-height: 12px !important;
+}
+
+.access-control-table .action-btn {
+  min-width: 78px !important;
+  padding-inline: 0.85rem !important;
+  font-size: 0.72rem !important;
+}
