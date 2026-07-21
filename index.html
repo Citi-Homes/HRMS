@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/admin.css?v=access-control-fit-20260721">
+  <link rel="stylesheet" href="assets/admin.css?v=access-all-tabs-20260721">
 </head>
 <body>
   <main id="loginView" class="login-shell">
@@ -818,11 +818,20 @@ const accessPermissionFields = [
   { key: "can_view_attendance", label: "Attendance Portal" },
   { key: "can_view_employee_master", label: "Employee Master" },
   { key: "can_view_recruitment", label: "Recruitment Tracker" },
+  { key: "can_view_recruitment", uiKey: "can_view_interview_evaluation", label: "Interview Evaluation" },
+  { key: "can_view_employee_master", uiKey: "can_view_joining_checklist", label: "Joining Checklist" },
   { key: "can_manage_leave", label: "Leave Management" },
-  { key: "can_manage_vendors", label: "Vendor Database" },
+  { key: "can_view_employee_master", uiKey: "can_view_documents", label: "Visa & Documents" },
+  { key: "can_manage_pantry", label: "Pantry Management" },
+  { key: "can_manage_vendors", uiKey: "can_manage_utilities", label: "Utility Bills" },
   { key: "can_manage_inventory", label: "Office Inventory" },
-  { key: "can_manage_pantry", label: "Pantry Management" }
+  { key: "can_manage_vendors", label: "Vendor Database" },
+  { key: "can_manage_leave", uiKey: "can_manage_tasks", label: "P&C Task Calendar" }
 ];
+
+function accessPermissionInputKey(item) {
+  return item.uiKey || item.key;
+}
 
 function defaultAccessForRole(role) {
   const access = Object.fromEntries(accessPermissionFields.map((item) => [item.key, false]));
@@ -837,7 +846,7 @@ function applyAccessLevelDefaults(form) {
   const selectedLevel = form.querySelector('[data-access-field="role"]')?.value || "Viewer";
   const defaults = defaultAccessForRole(selectedLevel);
   accessPermissionFields.forEach((item) => {
-    const checkbox = form.querySelector(`[data-access-permission="${item.key}"]`);
+    const checkbox = form.querySelector(`[data-access-permission="${accessPermissionInputKey(item)}"]`);
     if (!checkbox) return;
     if (selectedLevel === "Customized Level") return;
     checkbox.checked = Boolean(defaults[item.key]);
@@ -888,7 +897,7 @@ function accessProfileRow(profile) {
       <td>
         <div class="access-check-grid table-access-grid">
           ${accessPermissionFields.map((item) => `
-            <label class="access-check"><input data-existing-access-permission="${item.key}" type="checkbox"${profile[item.key] ? " checked" : ""}>${item.label}</label>
+            <label class="access-check"><input data-existing-access-permission="${accessPermissionInputKey(item)}" type="checkbox"${profile[item.key] ? " checked" : ""}>${item.label}</label>
           `).join("")}
         </div>
       </td>
@@ -941,7 +950,7 @@ async function renderAccessControlPage() {
     <label>Access Description<input data-access-field="access_level" type="text" placeholder="Limited access to selected modules"></label>
     <div class="access-check-grid">
       ${accessPermissionFields.map((item) => `
-        <label class="access-check"><input data-access-permission="${item.key}" type="checkbox">${item.label}</label>
+        <label class="access-check"><input data-access-permission="${accessPermissionInputKey(item)}" type="checkbox">${item.label}</label>
       `).join("")}
     </div>
     <label class="access-check"><input data-access-field="is_active" type="checkbox" checked>Active profile</label>
@@ -965,7 +974,7 @@ function accessFormPayload(form) {
   };
   const defaults = defaultAccessForRole(selectedLevel);
   accessPermissionFields.forEach((item) => {
-    payload[item.key] = selectedLevel === "Super User" ? true : Boolean(form.querySelector(`[data-access-permission="${item.key}"]`)?.checked || defaults[item.key]);
+    payload[item.key] = selectedLevel === "Super User" ? true : Boolean(payload[item.key] || form.querySelector(`[data-access-permission="${accessPermissionInputKey(item)}"]`)?.checked || defaults[item.key]);
   });
   return payload;
 }
@@ -975,7 +984,7 @@ function applyExistingAccessLevelDefaults(row) {
   const selectedLevel = row.querySelector('[data-existing-access-field="role"]')?.value || "Viewer";
   const defaults = defaultAccessForRole(selectedLevel);
   accessPermissionFields.forEach((item) => {
-    const checkbox = row.querySelector(`[data-existing-access-permission="${item.key}"]`);
+    const checkbox = row.querySelector(`[data-existing-access-permission="${accessPermissionInputKey(item)}"]`);
     if (!checkbox) return;
     if (selectedLevel === "Customized Level") return;
     checkbox.checked = Boolean(defaults[item.key]);
@@ -996,7 +1005,7 @@ function existingAccessPayload(row) {
     is_active: Boolean(row.querySelector('[data-existing-access-field="is_active"]')?.checked)
   };
   accessPermissionFields.forEach((item) => {
-    payload[item.key] = selectedLevel === "Super User" ? true : Boolean(row.querySelector(`[data-existing-access-permission="${item.key}"]`)?.checked);
+    payload[item.key] = selectedLevel === "Super User" ? true : Boolean(payload[item.key] || row.querySelector(`[data-existing-access-permission="${accessPermissionInputKey(item)}"]`)?.checked);
   });
   return payload;
 }
