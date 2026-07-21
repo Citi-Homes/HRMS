@@ -1931,3 +1931,123 @@ td:nth-child(5) select {
   overflow-wrap: normal !important;
   word-break: normal !important;
 }
+
+
+
+/* Access Control permission alignment - locked checkbox and label */
+.access-control-table td:nth-child(6) {
+  white-space: normal !important;
+  overflow: visible !important;
+}
+
+.access-control-table .table-access-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(92px, 1fr)) !important;
+  gap: 0.28rem 0.34rem !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+
+.access-control-table .table-access-grid .access-check {
+  display: inline-flex !important;
+  grid-template-columns: none !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0.32rem !important;
+  min-width: 0 !important;
+  min-height: 26px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0.12rem 0.08rem !important;
+  border-radius: 8px !important;
+  color: var(--muted) !important;
+  font-size: 0.62rem !important;
+  font-weight: 700 !important;
+  line-height: 1.08 !important;
+  text-align: left !important;
+  white-space: normal !important;
+}
+
+.access-control-table .table-access-grid .access-check input[type="checkbox"] {
+  appearance: auto !important;
+  display: inline-block !important;
+  flex: 0 0 13px !important;
+  width: 13px !important;
+  min-width: 13px !important;
+  max-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  max-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-self: center !important;
+}
+
+.access-control-table .table-access-grid .access-check .permission-label,
+.access-control-table .table-access-grid .access-check span {
+  display: block !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+
+
+/* Access Control permission alignment - locked checkbox and label */
+.access-control-table td:nth-child(6) {
+  white-space: normal !important;
+  overflow: visible !important;
+}
+
+.access-control-table .table-access-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(92px, 1fr)) !important;
+  gap: 0.28rem 0.34rem !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+
+.access-control-table .table-access-grid .access-check {
+  display: inline-flex !important;
+  grid-template-columns: none !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0.32rem !important;
+  min-width: 0 !important;
+  min-height: 26px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0.12rem 0.08rem !important;
+  border-radius: 8px !important;
+  color: var(--muted) !important;
+  font-size: 0.62rem !important;
+  font-weight: 700 !important;
+  line-height: 1.08 !important;
+  text-align: left !important;
+  white-space: normal !important;
+}
+
+.access-control-table .table-access-grid .access-check input[type="checkbox"] {
+  appearance: auto !important;
+  display: inline-block !important;
+  flex: 0 0 13px !important;
+  width: 13px !important;
+  min-width: 13px !important;
+  max-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  max-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-self: center !important;
+}
+
+.access-control-table .table-access-grid .access-check .permission-label,
+.access-control-table .table-access-grid .access-check span {
+  display: block !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
