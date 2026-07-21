@@ -570,3 +570,71 @@
   window.addEventListener("load", function () { window.setTimeout(installPrioritySubmit, 600); });
   new MutationObserver(installPrioritySubmit).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+
+// First-login password robust re-authentication save for the pilot account.
+(function () {
+  var pilotEmail = "test@citihomes.ae";
+
+  function getClient() {
+    var cfg = window.CITI_HOMES_SUPABASE || {};
+    if (!window.supabase || !cfg.url || !cfg.anonKey) return null;
+    return window.supabase.createClient(cfg.url, cfg.anonKey);
+  }
+
+  function setMessage(text, isError) {
+    var message = document.getElementById("firstLoginMessage");
+    if (!message) return;
+    message.style.color = isError ? "#b13b2f" : "#4f6f48";
+    message.textContent = text;
+  }
+
+  async function robustPilotPasswordSave(event) {
+    var target = event && event.target;
+    var overlay = document.getElementById("firstLoginPasswordOverlay");
+    if (!overlay || !target || !target.closest || !target.closest("#firstLoginPasswordOverlay")) return;
+    if (event.type === "click" && !target.closest('button[type="submit"]')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    var client = getClient();
+    var current = (document.getElementById("firstLoginCurrentPassword") || {}).value || "";
+    var next = (document.getElementById("firstLoginPassword") || {}).value || "";
+    var confirm = (document.getElementById("firstLoginConfirm") || {}).value || "";
+    var button = overlay.querySelector('button[type="submit"]');
+
+    if (!client) return setMessage("Secure connection is not ready. Please refresh and try again.", true);
+    if (!current) return setMessage("Please enter your current temporary password.", true);
+    if (!next || next.length < 8) return setMessage("Password must be at least 8 characters.", true);
+    if (next !== confirm) return setMessage("New password and confirm password must match.", true);
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Saving...";
+    }
+    setMessage("Checking current password...", false);
+
+    try {
+      var signIn = await client.auth.signInWithPassword({ email: pilotEmail, password: current });
+      if (signIn && signIn.error) throw signIn.error;
+      setMessage("Saving your new password...", false);
+      var update = await client.auth.updateUser({ password: next });
+      if (update && update.error) throw update.error;
+      var complete = await client.rpc("complete_my_first_login_password_change");
+      if (complete && complete.error) throw complete.error;
+      setMessage("Password saved. Opening HRMS...", false);
+      window.setTimeout(function () { window.location.reload(); }, 900);
+    } catch (error) {
+      setMessage((error && error.message) ? error.message : "Password could not be saved. Please check your current password and try again.", true);
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Save Password";
+      }
+    }
+  }
+
+  document.addEventListener("click", robustPilotPasswordSave, true);
+  document.addEventListener("submit", robustPilotPasswordSave, true);
+})();
