@@ -736,7 +736,7 @@ const summaryEmployee = currentLeaveEmployee();
           const status = row.approval_status || "Pending";
           const accrued = isAnnual ? Math.round(Number(row.accrued_to_date || balance.accrued || 0)) : "-";
           const used = isAnnual ? Math.round(Number(row.used || balance.used || 0)) : "-";
-          const remaining = isAnnual ? Math.round(Number(row.remaining ?? Math.max(0, balance.remaining - (status === "Approved" ? requestedDays : 0)) || 0)) : "-";
+          const remaining = isAnnual ? Math.round(Number((row.remaining ?? Math.max(0, balance.remaining - (status === "Approved" ? requestedDays : 0))) || 0)) : "-";
           return `
             <tr data-id="${row.id || ""}">
               <td>${index + 1}</td>
