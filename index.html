@@ -1577,10 +1577,14 @@ $("#loginForm").addEventListener("submit", async (event) => {
   $("#loginMessage").textContent = "";
   try {
     state.session = await signIn($("#username").value, $("#password").value);
-    await loadDashboardData();
-    await loadHierarchyData();
     renderShell();
     renderDashboard();
+    loadDashboardData({ optional: true }).then(() => {
+      if (state.page === "dashboard") renderDashboard();
+    }).catch((error) => console.warn("Dashboard data loaded after login with warnings", error));
+    loadHierarchyData().then(() => {
+      if (state.page === "dashboard") renderDashboard();
+    }).catch((error) => console.warn("Hierarchy loaded after login with warnings", error));
   } catch (error) {
     const errorParts = [];
     if (error?.message) errorParts.push(error.message);
@@ -1714,9 +1718,14 @@ document.addEventListener("change", async (event) => {
   renderShell();
   if (state.session) {
     state.portalUser = await verifyPortalAccess();
-    await loadDashboardData();
-    await loadHierarchyData();
-    await showPage(state.page);
+    renderShell();
+    renderDashboard();
+    loadDashboardData({ optional: true }).then(() => {
+      if (state.page === "dashboard") renderDashboard();
+    }).catch((error) => console.warn("Dashboard data loaded after session restore with warnings", error));
+    loadHierarchyData().then(() => {
+      if (state.page === "dashboard") renderDashboard();
+    }).catch((error) => console.warn("Hierarchy loaded after session restore with warnings", error));
   }
   updateAbuDhabiTime();
   setInterval(updateAbuDhabiTime, 30000);
