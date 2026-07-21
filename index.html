@@ -716,7 +716,7 @@ const summaryEmployee = currentLeaveEmployee();
   const balanceText = summaryBalance.used > 0 ? `${remainingDays} / ${accruedDays} Days` : `${accruedDays} Days`;
   $("#summaryCards").innerHTML = `
     ${metric("Leave Category", leaveEntitlementForEmployee(summaryEmployee))}
-    ${metric("Current Leave Balance / Accrued Leave", balanceText)}
+    ${metric("Accrued as of today", balanceText)}
     ${metric("Upcoming Leave", upcomingLeaveStatus(summaryEmployee, state.rows.leave_management || []))}
   `;
   $("#pageTools").innerHTML = leavePolicyPanel();
@@ -734,9 +734,9 @@ const summaryEmployee = currentLeaveEmployee();
           const balance = leaveBalanceForEmployee(row.employee, row.id);
           const isAnnual = String(row.leave_type || "").toLowerCase() === "annual leave";
           const status = row.approval_status || "Pending";
-          const accrued = isAnnual ? Number(row.accrued_to_date || balance.accrued).toFixed(2) : "-";
-          const used = isAnnual ? Number(row.used || balance.used).toFixed(2) : "-";
-          const remaining = isAnnual ? Number(row.remaining ?? Math.max(0, balance.remaining - (status === "Approved" ? requestedDays : 0))).toFixed(2) : "-";
+          const accrued = isAnnual ? Math.round(Number(row.accrued_to_date || balance.accrued || 0)) : "-";
+          const used = isAnnual ? Math.round(Number(row.used || balance.used || 0)) : "-";
+          const remaining = isAnnual ? Math.round(Number(row.remaining ?? Math.max(0, balance.remaining - (status === "Approved" ? requestedDays : 0)) || 0)) : "-";
           return `
             <tr data-id="${row.id || ""}">
               <td>${index + 1}</td>
@@ -1637,15 +1637,35 @@ $("#recordForm").addEventListener("submit", async (event) => {
     row.submitted_at = new Date().toISOString();
     row.requested_days = Number(row.requested_days || daysBetweenInclusive(row.start_date, row.end_date));
     if (!row.requested_days) throw new Error("Please select valid leave dates or requested days.");
+    const duplicateLeave = (state.rows.leave_management || []).some((item) =>
+      normalizePerson(item.employee) === normalizePerson(row.employee) &&
+      String(item.leave_type || "").toLowerCase() === String(row.leave_type || "").toLowerCase() &&
+      String(item.start_date || "") === String(row.start_date || "") &&
+      String(item.end_date || "") === String(row.end_date || "") &&
+      !["rejected", "cancelled"].includes(String(item.approval_status || "Pending").toLowerCase())
+    );
+    if (duplicateLeave) {
+      alert("This leave request already exists for the selected employee and dates.");
+      return;
+    }
     const balance = leaveBalanceForEmployee(row.employee);
     const isAnnual = String(row.leave_type || "").toLowerCase() === "annual leave";
     row.accrued_to_date = isAnnual ? balance.accrued : null;
     row.used = isAnnual ? balance.used : null;
     row.remaining = isAnnual ? balance.remaining : null;
-    await upsertRow(page.table, row);
-    state.rows[page.table] = await fetchRows(page.table);
-    event.currentTarget.reset();
-    await showPage(state.page);
+    const submitButton = event.currentTarget.querySelector('[type="submit"]');
+    if (submitButton?.disabled) return;
+    if (submitButton) submitButton.disabled = true;
+    try {
+      await upsertRow(page.table, row);
+      state.rows[page.table] = await fetchRows(page.table);
+      event.currentTarget.reset();
+      await showPage(state.page);
+    } catch (error) {
+      alert(error.message || error);
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
     return;
   }
   if (!canEditTable(page.table)) throw new Error("You do not have permission to add this data.");
