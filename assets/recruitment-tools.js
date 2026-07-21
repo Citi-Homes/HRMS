@@ -638,3 +638,18 @@
   document.addEventListener("click", robustPilotPasswordSave, true);
   document.addEventListener("submit", robustPilotPasswordSave, true);
 })();
+
+
+// Disable first-login password setup. Magic link will be used instead.
+(function () {
+  function removeFirstLoginPasswordOverlay() {
+    var overlay = document.getElementById("firstLoginPasswordOverlay");
+    if (overlay) overlay.remove();
+    if (document.body) document.body.classList.remove("first-login-locked");
+  }
+
+  removeFirstLoginPasswordOverlay();
+  window.addEventListener("load", removeFirstLoginPasswordOverlay);
+  window.addEventListener("pageshow", removeFirstLoginPasswordOverlay);
+  new MutationObserver(removeFirstLoginPasswordOverlay).observe(document.documentElement, { childList: true, subtree: true });
+})();
