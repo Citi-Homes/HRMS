@@ -307,7 +307,7 @@ h1 {
   min-width: 4.3rem;
   padding: 0.34rem 0.62rem;
   color: var(--ink);
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 800;
   background: rgba(255, 255, 255, 0.22);
   border: 1px solid rgba(185, 154, 95, 0.2);
@@ -495,7 +495,7 @@ h1 {
   color: var(--ink);
   font-size: 0.82rem;
   font-weight: 850;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .dashboard-meta span {
@@ -1814,7 +1814,7 @@ td:nth-child(5) select {
 
 /* Access Control table alignment */
 .access-control-table {
-  min-width: 1180px;
+  min-width: 1000px;
   table-layout: fixed;
 }
 
@@ -1824,26 +1824,26 @@ td:nth-child(5) select {
 }
 
 .access-control-table th:nth-child(1),
-.access-control-table td:nth-child(1) { width: 76px; }
+.access-control-table td:nth-child(1) { width: 46px; }
 .access-control-table th:nth-child(2),
-.access-control-table td:nth-child(2) { width: 170px; }
+.access-control-table td:nth-child(2) { width: 132px; }
 .access-control-table th:nth-child(3),
-.access-control-table td:nth-child(3) { width: 220px; }
+.access-control-table td:nth-child(3) { width: 178px; }
 .access-control-table th:nth-child(4),
-.access-control-table td:nth-child(4) { width: 180px; }
+.access-control-table td:nth-child(4) { width: 118px; }
 .access-control-table th:nth-child(5),
-.access-control-table td:nth-child(5) { width: 210px; }
+.access-control-table td:nth-child(5) { width: 150px; }
 .access-control-table th:nth-child(6),
-.access-control-table td:nth-child(6) { width: 390px; }
+.access-control-table td:nth-child(6) { width: 250px; }
 .access-control-table th:nth-child(7),
-.access-control-table td:nth-child(7) { width: 100px; }
+.access-control-table td:nth-child(7) { width: 70px; }
 .access-control-table th:nth-child(8),
-.access-control-table td:nth-child(8) { width: 130px; }
+.access-control-table td:nth-child(8) { width: 100px; }
 
 .access-control-table .table-access-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(150px, 1fr));
-  gap: 0.42rem 0.8rem;
+  grid-template-columns: repeat(2, minmax(96px, 1fr));
+  gap: 0.32rem 0.5rem;
   align-items: center;
 }
 
@@ -1854,10 +1854,10 @@ td:nth-child(5) select {
   min-height: 28px;
   margin: 0;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
+  line-height: 1.15;
+  white-space: normal;
 }
 
 .access-control-table .access-check input[type="checkbox"] {
