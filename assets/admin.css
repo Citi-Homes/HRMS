@@ -1810,3 +1810,65 @@ td:nth-child(5) select {
   padding: 0 !important;
   font-size: 0.72rem !important;
 }
+
+
+/* Access Control table alignment */
+.access-control-table {
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+.access-control-table th,
+.access-control-table td {
+  vertical-align: middle;
+}
+
+.access-control-table th:nth-child(1),
+.access-control-table td:nth-child(1) { width: 76px; }
+.access-control-table th:nth-child(2),
+.access-control-table td:nth-child(2) { width: 170px; }
+.access-control-table th:nth-child(3),
+.access-control-table td:nth-child(3) { width: 220px; }
+.access-control-table th:nth-child(4),
+.access-control-table td:nth-child(4) { width: 180px; }
+.access-control-table th:nth-child(5),
+.access-control-table td:nth-child(5) { width: 210px; }
+.access-control-table th:nth-child(6),
+.access-control-table td:nth-child(6) { width: 390px; }
+.access-control-table th:nth-child(7),
+.access-control-table td:nth-child(7) { width: 100px; }
+.access-control-table th:nth-child(8),
+.access-control-table td:nth-child(8) { width: 130px; }
+
+.access-control-table .table-access-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 0.42rem 0.8rem;
+  align-items: center;
+}
+
+.access-control-table .access-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 28px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.access-control-table .access-check input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.access-control-table .table-input,
+.access-control-table .table-select {
+  min-width: 0;
+  width: 100%;
+}
