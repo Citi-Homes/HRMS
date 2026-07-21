@@ -392,3 +392,101 @@
   window.addEventListener("load", function () { window.setTimeout(addPasswordToggle, 500); });
   new MutationObserver(addPasswordToggle).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+
+// First-login password current-password support for Supabase secure password changes.
+(function () {
+  function getClient() {
+    var cfg = window.CITI_HOMES_SUPABASE || {};
+    if (!window.supabase || !cfg.url || !cfg.anonKey) return null;
+    return window.supabase.createClient(cfg.url, cfg.anonKey);
+  }
+
+  function setMessage(text, isError) {
+    var message = document.getElementById("firstLoginMessage");
+    if (!message) return;
+    message.style.color = isError ? "#b13b2f" : "#4f6f48";
+    message.textContent = text;
+  }
+
+  function allPasswordInputs() {
+    return Array.from(document.querySelectorAll("#firstLoginPasswordOverlay input[type='password'], #firstLoginPasswordOverlay input[type='text']"))
+      .filter(function (input) { return input.id !== "firstLoginShowPassword"; });
+  }
+
+  async function saveWithCurrentPassword(event) {
+    var form = event.target;
+    if (!form || !form.closest || !form.closest("#firstLoginPasswordOverlay")) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    var client = getClient();
+    var currentInput = document.getElementById("firstLoginCurrentPassword");
+    var passwordInput = document.getElementById("firstLoginPassword");
+    var confirmInput = document.getElementById("firstLoginConfirm");
+    var submitButton = form.querySelector('button[type="submit"]');
+    var currentPassword = currentInput ? currentInput.value : "";
+    var password = passwordInput ? passwordInput.value : "";
+    var confirm = confirmInput ? confirmInput.value : "";
+
+    if (!client) return setMessage("Secure connection is not ready. Please refresh and try again.", true);
+    if (!currentPassword) return setMessage("Please enter your current temporary password.", true);
+    if (!password || password.length < 8) return setMessage("Password must be at least 8 characters.", true);
+    if (password !== confirm) return setMessage("New password and confirm password must match.", true);
+
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Saving...";
+    }
+    setMessage("Saving your password...", false);
+
+    try {
+      var updateResult = await client.auth.updateUser({ password: password, currentPassword: currentPassword });
+      if (updateResult && updateResult.error) throw updateResult.error;
+      var completeResult = await client.rpc("complete_my_first_login_password_change");
+      if (completeResult && completeResult.error) throw completeResult.error;
+      setMessage("Password saved. Opening HRMS...", false);
+      window.setTimeout(function () { window.location.reload(); }, 900);
+    } catch (error) {
+      setMessage((error && error.message) ? error.message : "Password could not be saved. Please check your current password and try again.", true);
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Save Password";
+      }
+    }
+  }
+
+  function installCurrentPasswordSupport() {
+    var overlay = document.getElementById("firstLoginPasswordOverlay");
+    var form = overlay && overlay.querySelector("form");
+    var newPassword = document.getElementById("firstLoginPassword");
+    var confirmPassword = document.getElementById("firstLoginConfirm");
+    if (!overlay || !form || !newPassword || !confirmPassword) return;
+
+    if (!document.getElementById("firstLoginCurrentPassword")) {
+      var currentLabel = document.createElement("label");
+      currentLabel.textContent = "Current temporary password";
+      currentLabel.innerHTML += '<input id="firstLoginCurrentPassword" type="password" autocomplete="current-password" required>';
+      form.insertBefore(currentLabel, newPassword.closest("label"));
+    }
+
+    var showToggle = document.getElementById("firstLoginShowPassword");
+    if (showToggle && showToggle.dataset.currentPasswordPatched !== "true") {
+      showToggle.dataset.currentPasswordPatched = "true";
+      showToggle.addEventListener("change", function () {
+        var nextType = this.checked ? "text" : "password";
+        allPasswordInputs().forEach(function (input) { input.type = nextType; });
+      }, true);
+    }
+
+    if (showToggle && showToggle.checked) allPasswordInputs().forEach(function (input) { input.type = "text"; });
+
+    if (form.dataset.currentPasswordSubmitPatched !== "true") {
+      form.dataset.currentPasswordSubmitPatched = "true";
+      form.addEventListener("submit", saveWithCurrentPassword, true);
+    }
+  }
+
+  window.addEventListener("load", function () { window.setTimeout(installCurrentPasswordSupport, 500); });
+  new MutationObserver(installCurrentPasswordSupport).observe(document.documentElement, { childList: true, subtree: true });
+})();
