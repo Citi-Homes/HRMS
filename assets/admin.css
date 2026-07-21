@@ -2106,3 +2106,45 @@ td:nth-child(5) select {
   padding-inline: 0.85rem !important;
   font-size: 0.72rem !important;
 }
+
+
+
+/* Access Control status/action separation */
+.access-control-table th:nth-child(7),
+.access-control-table td:nth-child(7) {
+  width: 88px !important;
+  min-width: 88px !important;
+  text-align: center !important;
+  padding-inline: 0.35rem !important;
+}
+
+.access-control-table th:nth-child(8),
+.access-control-table td:nth-child(8) {
+  width: 150px !important;
+  min-width: 150px !important;
+  text-align: center !important;
+  padding-inline: 0.5rem !important;
+}
+
+.access-control-table td:nth-child(7) input[type="checkbox"] {
+  display: inline-block !important;
+  width: 16px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+  margin: 0 auto !important;
+}
+
+.access-control-table td:nth-child(8) button,
+.access-control-table td:nth-child(8) .action-btn {
+  position: static !important;
+  transform: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 118px !important;
+  max-width: 126px !important;
+  height: 46px !important;
+  margin: 0 auto !important;
+  white-space: normal !important;
+  line-height: 1.05 !important;
+}
