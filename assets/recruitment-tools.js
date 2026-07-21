@@ -490,3 +490,83 @@
   window.addEventListener("load", function () { window.setTimeout(installCurrentPasswordSupport, 500); });
   new MutationObserver(installCurrentPasswordSupport).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+
+// First-login password submit priority fix: run current-password save before older handlers.
+(function () {
+  function getClient() {
+    var cfg = window.CITI_HOMES_SUPABASE || {};
+    if (!window.supabase || !cfg.url || !cfg.anonKey) return null;
+    return window.supabase.createClient(cfg.url, cfg.anonKey);
+  }
+
+  function setMessage(text, isError) {
+    var message = document.getElementById("firstLoginMessage");
+    if (!message) return;
+    message.style.color = isError ? "#b13b2f" : "#4f6f48";
+    message.textContent = text;
+  }
+
+  function readFirstLoginPasswords() {
+    return {
+      current: (document.getElementById("firstLoginCurrentPassword") || {}).value || "",
+      next: (document.getElementById("firstLoginPassword") || {}).value || "",
+      confirm: (document.getElementById("firstLoginConfirm") || {}).value || ""
+    };
+  }
+
+  async function saveFirstLoginPasswordWithCurrent(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    if (event && event.stopPropagation) event.stopPropagation();
+    if (event && event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+    var client = getClient();
+    var values = readFirstLoginPasswords();
+    var button = document.querySelector('#firstLoginPasswordOverlay button[type="submit"]');
+
+    if (!client) return setMessage("Secure connection is not ready. Please refresh and try again.", true);
+    if (!values.current) return setMessage("Please enter your current temporary password.", true);
+    if (!values.next || values.next.length < 8) return setMessage("Password must be at least 8 characters.", true);
+    if (values.next !== values.confirm) return setMessage("New password and confirm password must match.", true);
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Saving...";
+    }
+    setMessage("Saving your password...", false);
+
+    try {
+      var updateResult = await client.auth.updateUser({ password: values.next, currentPassword: values.current });
+      if (updateResult && updateResult.error) throw updateResult.error;
+      var completeResult = await client.rpc("complete_my_first_login_password_change");
+      if (completeResult && completeResult.error) throw completeResult.error;
+      setMessage("Password saved. Opening HRMS...", false);
+      window.setTimeout(function () { window.location.reload(); }, 900);
+    } catch (error) {
+      setMessage((error && error.message) ? error.message : "Password could not be saved. Please check your current password and try again.", true);
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Save Password";
+      }
+    }
+  }
+
+  function installPrioritySubmit() {
+    var overlay = document.getElementById("firstLoginPasswordOverlay");
+    var form = overlay && overlay.querySelector("form");
+    var button = overlay && overlay.querySelector('button[type="submit"]');
+    if (!overlay || !form || !button || !document.getElementById("firstLoginCurrentPassword")) return;
+
+    if (overlay.dataset.prioritySubmitPatched !== "true") {
+      overlay.dataset.prioritySubmitPatched = "true";
+      overlay.addEventListener("submit", saveFirstLoginPasswordWithCurrent, true);
+    }
+    if (button.dataset.prioritySubmitPatched !== "true") {
+      button.dataset.prioritySubmitPatched = "true";
+      button.addEventListener("click", saveFirstLoginPasswordWithCurrent, true);
+    }
+  }
+
+  window.addEventListener("load", function () { window.setTimeout(installPrioritySubmit, 600); });
+  new MutationObserver(installPrioritySubmit).observe(document.documentElement, { childList: true, subtree: true });
+})();
