@@ -1231,3 +1231,77 @@
     }
   });
 })();
+
+
+// Stable Access Control profile creation through Supabase RPC.
+(function () {
+  if (window.__chAccessProfileCreatePatch) return;
+  window.__chAccessProfileCreatePatch = true;
+
+  function accessCreateMessage(text, tone) {
+    var node = document.getElementById("accessControlMessage");
+    if (!node) return;
+    node.textContent = text || "";
+    node.classList.toggle("success", tone === "success");
+    node.classList.toggle("error", tone === "error");
+  }
+
+  function profileRpcPayload(payload) {
+    return {
+      p_team_member_id: payload.team_member_id || "",
+      p_team_member_name: payload.team_member_name || "",
+      p_email: payload.email || "",
+      p_role: payload.role || "Viewer",
+      p_access_level: payload.access_level || payload.role || "Viewer",
+      p_is_active: payload.is_active !== false,
+      p_can_view_attendance: Boolean(payload.can_view_attendance),
+      p_can_view_employee_master: Boolean(payload.can_view_employee_master),
+      p_can_view_recruitment: Boolean(payload.can_view_recruitment),
+      p_can_manage_leave: Boolean(payload.can_manage_leave),
+      p_can_manage_vendors: Boolean(payload.can_manage_vendors),
+      p_can_manage_inventory: Boolean(payload.can_manage_inventory),
+      p_can_manage_pantry: Boolean(payload.can_manage_pantry)
+    };
+  }
+
+  async function createLoginAccountIfNeeded(payload, currentSession) {
+    if (!client || !client.auth || !payload.email || !payload.password) return "Access profile saved.";
+    var result = await client.auth.signUp({
+      email: payload.email,
+      password: payload.password,
+      options: { data: { display_name: payload.team_member_name || "", team_member_id: payload.team_member_id || "" } }
+    });
+    if (currentSession && currentSession.access_token && currentSession.refresh_token) {
+      await client.auth.setSession({ access_token: currentSession.access_token, refresh_token: currentSession.refresh_token });
+      if (typeof state === "object") state.session = currentSession;
+    }
+    if (result.error) {
+      var text = String(result.error.message || "");
+      if (text.toLowerCase().includes("already") || text.toLowerCase().includes("registered")) {
+        return "Access profile saved. Login account already exists.";
+      }
+      return "Access profile saved. Supabase Auth user may need checking: " + text;
+    }
+    return "Access profile saved and login account created.";
+  }
+
+  createAccessProfile = async function (form) {
+    if (typeof isSuperUser === "function" && !isSuperUser()) throw new Error("Only the superuser can create access profiles.");
+    if (!client) throw new Error("Supabase connection is not ready.");
+
+    accessCreateMessage("Creating profile...");
+    var payload = accessFormPayload(form);
+    if (!payload.team_member_id || !payload.team_member_name || !payload.email || !payload.password) {
+      throw new Error("Please fill Team Member ID, Name, Email and Temporary Password.");
+    }
+
+    var currentSession = typeof state === "object" ? state.session : null;
+    var rpcResult = await client.rpc("upsert_admin_portal_user_profile", profileRpcPayload(payload));
+    if (rpcResult.error) throw rpcResult.error;
+
+    var authMessage = await createLoginAccountIfNeeded(payload, currentSession);
+    if (form && typeof form.reset === "function") form.reset();
+    if (typeof renderAccessControlPage === "function") await renderAccessControlPage();
+    accessCreateMessage(authMessage + " Active for " + payload.email + ".", "success");
+  };
+})();
