@@ -1380,3 +1380,67 @@
     setAccessMessage("Profile saved for " + payload.email + ". Login account is being prepared in the background.", "success");
   };
 })();
+
+
+// Final Access Control create-profile override: save with Supabase Auth user ID.
+(function () {
+  window.__chAccessCreateAuthIdFinal = true;
+
+  function accessMessage(text, tone) {
+    var node = document.getElementById("accessControlMessage");
+    if (!node) return;
+    node.textContent = text || "";
+    node.classList.toggle("success", tone === "success");
+    node.classList.toggle("error", tone === "error");
+  }
+
+  async function restoreSuperuserSession(sessionSnapshot) {
+    try {
+      if (sessionSnapshot && sessionSnapshot.access_token && sessionSnapshot.refresh_token) {
+        await client.auth.setSession({ access_token: sessionSnapshot.access_token, refresh_token: sessionSnapshot.refresh_token });
+        if (typeof state === "object") state.session = sessionSnapshot;
+      }
+    } catch (error) {}
+  }
+
+  createAccessProfile = async function (form) {
+    if (typeof isSuperUser === "function" && !isSuperUser()) throw new Error("Only the superuser can create access profiles.");
+    if (!client) throw new Error("Supabase connection is not ready.");
+
+    accessMessage("Creating login account...");
+    var payload = accessFormPayload(form);
+    if (!payload.team_member_id || !payload.team_member_name || !payload.email || !payload.password) {
+      throw new Error("Please fill Team Member ID, Name, Email and Temporary Password.");
+    }
+
+    var sessionSnapshot = typeof state === "object" ? state.session : null;
+    var signUpResult = await Promise.race([
+      client.auth.signUp({
+        email: payload.email,
+        password: payload.password,
+        options: { data: { display_name: payload.team_member_name, team_member_id: payload.team_member_id } }
+      }),
+      new Promise(function (_, reject) {
+        window.setTimeout(function () { reject(new Error("Login account creation is taking too long. Please try again.")); }, 15000);
+      })
+    ]);
+    await restoreSuperuserSession(sessionSnapshot);
+
+    var signUpError = signUpResult && signUpResult.error;
+    var authUserId = signUpResult && signUpResult.data && signUpResult.data.user && signUpResult.data.user.id;
+    if (signUpError && !String(signUpError.message || "").toLowerCase().includes("already")) throw signUpError;
+    if (!authUserId) {
+      throw new Error("This email already exists in Supabase Auth or did not return an Auth ID. Delete that Auth user first, then create the profile again.");
+    }
+
+    accessMessage("Saving access profile...");
+    var profilePayload = Object.assign({}, payload, { auth_user_id: authUserId });
+    delete profilePayload.password;
+    var saveResult = await client.from("admin_portal_users").upsert(profilePayload, { onConflict: "auth_user_id" });
+    if (saveResult.error) throw saveResult.error;
+
+    form.reset();
+    if (typeof renderAccessControlPage === "function") await renderAccessControlPage();
+    accessMessage("Profile saved for " + payload.email + ".", "success");
+  };
+})();
