@@ -914,7 +914,7 @@
     if (toggle) toggle.remove();
 
     var submit = form.querySelector('button[type="submit"]');
-    if (submit) submit.textContent = "Send Magic Link";
+    if (submit && submit.textContent.trim() !== "Send Magic Link") submit.textContent = "Send Magic Link";
 
     if (!form.querySelector(".magic-link-note")) {
       var note = document.createElement("p");
