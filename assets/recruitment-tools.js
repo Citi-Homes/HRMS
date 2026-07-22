@@ -1210,3 +1210,24 @@
   window.addEventListener("load", bootPatch);
   window.addEventListener("pageshow", bootPatch);
 })();
+
+
+// Stop old magic-link button watcher from repeatedly rewriting restored login buttons.
+(function () {
+  if (window.__stopMagicLoginButtonLoop) return;
+  window.__stopMagicLoginButtonLoop = true;
+  var descriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+  Object.defineProperty(Node.prototype, "textContent", {
+    get: descriptor.get,
+    set: function (value) {
+      if (this && this.matches && this.matches('#loginForm button[type="submit"]') && value === "Send Magic Link") {
+        var mode = document.documentElement.dataset.loginMode;
+        var current = descriptor.get.call(this);
+        if (mode === "password" && current === "Login") return;
+        if (mode === "first_time" && current === "Send Create Password Link") return;
+      }
+      return descriptor.set.call(this, value);
+    }
+  });
+})();
