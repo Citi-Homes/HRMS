@@ -1305,3 +1305,78 @@
     accessCreateMessage(authMessage + " Active for " + payload.email + ".", "success");
   };
 })();
+
+
+// Fast Access Control profile creation: save profile first, create auth account in background.
+(function () {
+  if (window.__chFastAccessProfilePatch) return;
+  window.__chFastAccessProfilePatch = true;
+
+  function setAccessMessage(text, tone) {
+    var node = document.getElementById("accessControlMessage");
+    if (!node) return;
+    node.textContent = text || "";
+    node.classList.toggle("success", tone === "success");
+    node.classList.toggle("error", tone === "error");
+  }
+
+  function makeProfileRpcPayload(payload) {
+    return {
+      p_team_member_id: payload.team_member_id || "",
+      p_team_member_name: payload.team_member_name || "",
+      p_email: payload.email || "",
+      p_role: payload.role || "Viewer",
+      p_access_level: payload.access_level || payload.role || "Viewer",
+      p_is_active: payload.is_active !== false,
+      p_can_view_attendance: Boolean(payload.can_view_attendance),
+      p_can_view_employee_master: Boolean(payload.can_view_employee_master),
+      p_can_view_recruitment: Boolean(payload.can_view_recruitment),
+      p_can_manage_leave: Boolean(payload.can_manage_leave),
+      p_can_manage_vendors: Boolean(payload.can_manage_vendors),
+      p_can_manage_inventory: Boolean(payload.can_manage_inventory),
+      p_can_manage_pantry: Boolean(payload.can_manage_pantry)
+    };
+  }
+
+  function backgroundCreateAuthAccount(payload, sessionSnapshot) {
+    if (!client || !client.auth || !payload.email || !payload.password) return;
+    window.setTimeout(async function () {
+      try {
+        await client.auth.signUp({
+          email: payload.email,
+          password: payload.password,
+          options: { data: { display_name: payload.team_member_name || "", team_member_id: payload.team_member_id || "" } }
+        });
+      } catch (error) {
+        console.warn("Background login account creation needs checking", error);
+      } finally {
+        try {
+          if (sessionSnapshot && sessionSnapshot.access_token && sessionSnapshot.refresh_token) {
+            await client.auth.setSession({ access_token: sessionSnapshot.access_token, refresh_token: sessionSnapshot.refresh_token });
+            if (typeof state === "object") state.session = sessionSnapshot;
+          }
+        } catch (error) {}
+      }
+    }, 50);
+  }
+
+  createAccessProfile = async function (form) {
+    if (typeof isSuperUser === "function" && !isSuperUser()) throw new Error("Only the superuser can create access profiles.");
+    if (!client) throw new Error("Supabase connection is not ready.");
+
+    setAccessMessage("Saving profile...");
+    var payload = accessFormPayload(form);
+    if (!payload.team_member_id || !payload.team_member_name || !payload.email || !payload.password) {
+      throw new Error("Please fill Team Member ID, Name, Email and Temporary Password.");
+    }
+
+    var sessionSnapshot = typeof state === "object" ? state.session : null;
+    var rpcResult = await client.rpc("upsert_admin_portal_user_profile", makeProfileRpcPayload(payload));
+    if (rpcResult.error) throw rpcResult.error;
+
+    backgroundCreateAuthAccount(payload, sessionSnapshot);
+    if (form && typeof form.reset === "function") form.reset();
+    if (typeof renderAccessControlPage === "function") await renderAccessControlPage();
+    setAccessMessage("Profile saved for " + payload.email + ". Login account is being prepared in the background.", "success");
+  };
+})();
