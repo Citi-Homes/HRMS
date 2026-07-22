@@ -884,3 +884,106 @@
     applyViewOnlyUiGuards();
   }).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+
+// Magic link login patch. Password login is replaced by email-only sign in.
+(function () {
+  var MAGIC_REDIRECT_URL = "https://citi-homes.github.io/HRMS/";
+
+  function message(text, tone) {
+    var node = document.getElementById("loginMessage");
+    if (!node) return;
+    node.textContent = text || "";
+    node.classList.toggle("success", tone === "success");
+    node.classList.toggle("error", tone === "error");
+  }
+
+  function applyMagicLinkUi() {
+    var form = document.getElementById("loginForm");
+    var email = document.getElementById("username");
+    var password = document.getElementById("password");
+    var toggle = document.getElementById("passwordToggle");
+    if (!form || !email) return;
+
+    email.placeholder = "yourname@citihomes.ae";
+    email.autocomplete = "email";
+    email.required = true;
+
+    var passwordLabel = password ? password.closest("label") : null;
+    if (passwordLabel) passwordLabel.remove();
+    if (toggle) toggle.remove();
+
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = "Send Magic Link";
+
+    if (!form.querySelector(".magic-link-note")) {
+      var note = document.createElement("p");
+      note.className = "magic-link-note";
+      note.textContent = "Enter your approved Citi Homes email. We will send a secure one-time sign-in link.";
+      form.insertBefore(note, submit || document.getElementById("loginMessage"));
+    }
+  }
+
+  async function sendMagicLink(email) {
+    if (!client) throw new Error("Supabase connection is not ready.");
+    var cleanEmail = String(email || "").trim().toLowerCase();
+    if (!cleanEmail) throw new Error("Please enter your email address.");
+    if (!cleanEmail.endsWith("@citihomes.ae")) throw new Error("Please use your Citi Homes email address.");
+
+    var result = await client.auth.signInWithOtp({
+      email: cleanEmail,
+      options: {
+        emailRedirectTo: MAGIC_REDIRECT_URL,
+        shouldCreateUser: false
+      }
+    });
+    if (result.error) throw result.error;
+    return cleanEmail;
+  }
+
+  function installMagicSubmit() {
+    var form = document.getElementById("loginForm");
+    if (!form || form.dataset.magicLinkReady === "true") return;
+    form.dataset.magicLinkReady = "true";
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      var submit = form.querySelector('button[type="submit"]');
+      var original = submit ? submit.textContent : "Send Magic Link";
+      try {
+        if (submit) {
+          submit.disabled = true;
+          submit.textContent = "Sending...";
+        }
+        message("", "");
+        var sentTo = await sendMagicLink(document.getElementById("username")?.value);
+        message("Magic link sent to " + sentTo + ". Please open your email and click the sign-in link.", "success");
+      } catch (error) {
+        message(error?.message || String(error), "error");
+      } finally {
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = original;
+        }
+      }
+    }, true);
+  }
+
+  function cleanMagicLinkUrl() {
+    if (location.hash && /access_token|refresh_token|type=magiclink/.test(location.hash)) {
+      history.replaceState(null, document.title, location.pathname + location.search);
+    }
+  }
+
+  function applyMagicLinkPatch() {
+    applyMagicLinkUi();
+    installMagicSubmit();
+    cleanMagicLinkUrl();
+  }
+
+  applyMagicLinkPatch();
+  window.addEventListener("load", applyMagicLinkPatch);
+  window.addEventListener("pageshow", applyMagicLinkPatch);
+  new MutationObserver(applyMagicLinkPatch).observe(document.documentElement, { childList: true, subtree: true });
+})();
