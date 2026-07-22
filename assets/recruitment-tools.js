@@ -653,3 +653,234 @@
   window.addEventListener("pageshow", removeFirstLoginPasswordOverlay);
   new MutationObserver(removeFirstLoginPasswordOverlay).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+
+
+// Test profile view-only access and Store tab compatibility patch.
+(function () {
+  function testEmail() {
+    try {
+      if (typeof normalizedEmail === "function") return normalizedEmail();
+    } catch (error) {}
+    return "";
+  }
+
+  function isTestViewOnlyUser() {
+    return testEmail() === "test@citihomes.ae";
+  }
+
+  function applyTabPatch() {
+    try {
+      if (Array.isArray(pages)) {
+        var inventoryPage = pages.find(function (page) { return page.key === "inventory"; });
+        if (inventoryPage) inventoryPage.label = "Office Assets";
+
+        var hasStore = pages.some(function (page) { return page.key === "store"; });
+        if (!hasStore) {
+          var inventoryIndex = pages.findIndex(function (page) { return page.key === "inventory"; });
+          var storePage = { key: "store", label: "Store", table: "store" };
+          if (inventoryIndex >= 0) pages.splice(inventoryIndex + 1, 0, storePage);
+          else pages.push(storePage);
+        }
+      }
+
+      if (typeof columns === "object" && columns) {
+        columns.store = ["item", "category", "quantity", "location", "requested_by", "status", "remarks"];
+      }
+    } catch (error) {
+      console.warn("Unable to apply Store tab patch", error);
+    }
+  }
+
+  function patchPermissions() {
+    if (window.__testViewOnlyPermissionsPatched) return;
+    window.__testViewOnlyPermissionsPatched = true;
+
+    var originalCanEdit = typeof canEdit === "function" ? canEdit : function () { return false; };
+    var originalCanViewTable = typeof canViewTable === "function" ? canViewTable : function () { return false; };
+    var originalCanEditTable = typeof canEditTable === "function" ? canEditTable : function () { return false; };
+    var originalCanExportTable = typeof canExportTable === "function" ? canExportTable : function () { return false; };
+    var originalCanViewPage = typeof canViewPage === "function" ? canViewPage : function () { return false; };
+    var originalCanViewAttendancePortal = typeof canViewAttendancePortal === "function" ? canViewAttendancePortal : function () { return false; };
+
+    canEdit = function () {
+      if (isTestViewOnlyUser()) return false;
+      return originalCanEdit();
+    };
+
+    canViewTable = function (table) {
+      if (isTestViewOnlyUser()) return table !== "employee_hierarchy";
+      if (table === "store") return originalCanViewTable("inventory");
+      return originalCanViewTable(table);
+    };
+
+    canEditTable = function (table) {
+      if (isTestViewOnlyUser()) return false;
+      if (table === "store") return originalCanEditTable("inventory");
+      return originalCanEditTable(table);
+    };
+
+    canExportTable = function (table) {
+      if (isTestViewOnlyUser()) return false;
+      if (table === "store") return originalCanExportTable("inventory");
+      return originalCanExportTable(table);
+    };
+
+    canViewAttendancePortal = function () {
+      if (isTestViewOnlyUser()) return true;
+      return originalCanViewAttendancePortal();
+    };
+
+    canViewPage = function (page) {
+      if (isTestViewOnlyUser()) {
+        if (page.key === "access_control" || page.key === "hierarchy") return false;
+        if (page.key === "attendance") return true;
+        if (page.table) return page.table !== "employee_hierarchy";
+        return true;
+      }
+      return originalCanViewPage(page);
+    };
+  }
+
+  function applyViewOnlyUiGuards() {
+    if (!isTestViewOnlyUser()) return;
+    document.querySelectorAll("[data-save], [data-delete], [data-import], [data-export], [data-clear-table], [data-recruitment-template]").forEach(function (node) {
+      node.remove();
+    });
+    document.querySelectorAll("#recordForm, #addRecordPanel").forEach(function (node) {
+      node.hidden = true;
+    });
+  }
+
+  function applyPatch() {
+    applyTabPatch();
+    patchPermissions();
+    applyViewOnlyUiGuards();
+    try {
+      if (typeof renderShell === "function") renderShell();
+    } catch (error) {}
+  }
+
+  applyPatch();
+  window.addEventListener("load", applyPatch);
+  window.addEventListener("pageshow", applyPatch);
+  new MutationObserver(function () {
+    applyTabPatch();
+    applyViewOnlyUiGuards();
+  }).observe(document.documentElement, { childList: true, subtree: true });
+})();
+
+
+// Test profile view-only access and Store tab compatibility patch.
+(function () {
+  function testEmail() {
+    try {
+      if (typeof normalizedEmail === "function") return normalizedEmail();
+    } catch (error) {}
+    return "";
+  }
+
+  function isTestViewOnlyUser() {
+    return testEmail() === "test@citihomes.ae";
+  }
+
+  function applyTabPatch() {
+    try {
+      if (Array.isArray(pages)) {
+        var inventoryPage = pages.find(function (page) { return page.key === "inventory"; });
+        if (inventoryPage) inventoryPage.label = "Office Assets";
+
+        var hasStore = pages.some(function (page) { return page.key === "store"; });
+        if (!hasStore) {
+          var inventoryIndex = pages.findIndex(function (page) { return page.key === "inventory"; });
+          var storePage = { key: "store", label: "Store", table: "store" };
+          if (inventoryIndex >= 0) pages.splice(inventoryIndex + 1, 0, storePage);
+          else pages.push(storePage);
+        }
+      }
+
+      if (typeof columns === "object" && columns) {
+        columns.store = ["item", "category", "quantity", "location", "requested_by", "status", "remarks"];
+      }
+    } catch (error) {
+      console.warn("Unable to apply Store tab patch", error);
+    }
+  }
+
+  function patchPermissions() {
+    if (window.__testViewOnlyPermissionsPatched) return;
+    window.__testViewOnlyPermissionsPatched = true;
+
+    var originalCanEdit = typeof canEdit === "function" ? canEdit : function () { return false; };
+    var originalCanViewTable = typeof canViewTable === "function" ? canViewTable : function () { return false; };
+    var originalCanEditTable = typeof canEditTable === "function" ? canEditTable : function () { return false; };
+    var originalCanExportTable = typeof canExportTable === "function" ? canExportTable : function () { return false; };
+    var originalCanViewPage = typeof canViewPage === "function" ? canViewPage : function () { return false; };
+    var originalCanViewAttendancePortal = typeof canViewAttendancePortal === "function" ? canViewAttendancePortal : function () { return false; };
+
+    canEdit = function () {
+      if (isTestViewOnlyUser()) return false;
+      return originalCanEdit();
+    };
+
+    canViewTable = function (table) {
+      if (isTestViewOnlyUser()) return table !== "employee_hierarchy";
+      if (table === "store") return originalCanViewTable("inventory");
+      return originalCanViewTable(table);
+    };
+
+    canEditTable = function (table) {
+      if (isTestViewOnlyUser()) return false;
+      if (table === "store") return originalCanEditTable("inventory");
+      return originalCanEditTable(table);
+    };
+
+    canExportTable = function (table) {
+      if (isTestViewOnlyUser()) return false;
+      if (table === "store") return originalCanExportTable("inventory");
+      return originalCanExportTable(table);
+    };
+
+    canViewAttendancePortal = function () {
+      if (isTestViewOnlyUser()) return true;
+      return originalCanViewAttendancePortal();
+    };
+
+    canViewPage = function (page) {
+      if (isTestViewOnlyUser()) {
+        if (page.key === "access_control" || page.key === "hierarchy") return false;
+        if (page.key === "attendance") return true;
+        if (page.table) return page.table !== "employee_hierarchy";
+        return true;
+      }
+      return originalCanViewPage(page);
+    };
+  }
+
+  function applyViewOnlyUiGuards() {
+    if (!isTestViewOnlyUser()) return;
+    document.querySelectorAll("[data-save], [data-delete], [data-import], [data-export], [data-clear-table], [data-recruitment-template]").forEach(function (node) {
+      node.remove();
+    });
+    document.querySelectorAll("#recordForm, #addRecordPanel").forEach(function (node) {
+      node.hidden = true;
+    });
+  }
+
+  function applyPatch() {
+    applyTabPatch();
+    patchPermissions();
+    applyViewOnlyUiGuards();
+    try {
+      if (typeof renderShell === "function") renderShell();
+    } catch (error) {}
+  }
+
+  applyPatch();
+  window.addEventListener("load", applyPatch);
+  window.addEventListener("pageshow", applyPatch);
+  new MutationObserver(function () {
+    applyTabPatch();
+    applyViewOnlyUiGuards();
+  }).observe(document.documentElement, { childList: true, subtree: true });
+})();
