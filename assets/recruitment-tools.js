@@ -1444,3 +1444,40 @@
     accessMessage("Profile saved for " + payload.email + ".", "success");
   };
 })();
+
+
+// Final Access Control profile save. This keeps the current superuser session active.
+(function () {
+  window.__chAccessProfileOnlyFinal = true;
+
+  function setAccessProfileMessage(text, tone) {
+    var node = document.getElementById("accessControlMessage");
+    if (!node) return;
+    node.textContent = text || "";
+    node.classList.toggle("success", tone === "success");
+    node.classList.toggle("error", tone === "error");
+  }
+
+  window.createAccessProfile = async function (form) {
+    if (typeof isSuperUser === "function" && !isSuperUser()) {
+      throw new Error("Only the superuser can create access profiles.");
+    }
+    if (!client) throw new Error("Supabase connection is not ready.");
+
+    setAccessProfileMessage("Saving access profile...");
+    var payload = accessFormPayload(form);
+    if (!payload.team_member_id || !payload.team_member_name || !payload.email) {
+      throw new Error("Please fill Team Member ID, Name and Email.");
+    }
+
+    var profilePayload = Object.assign({}, payload);
+    delete profilePayload.password;
+
+    var result = await client.from("admin_portal_users").insert(profilePayload);
+    if (result.error) throw result.error;
+
+    form.reset();
+    if (typeof renderAccessControlPage === "function") await renderAccessControlPage();
+    setAccessProfileMessage("Profile saved for " + payload.email + ". Create the login account from Supabase Auth when ready.", "success");
+  };
+})();
