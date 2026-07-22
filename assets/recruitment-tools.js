@@ -987,3 +987,226 @@
   window.addEventListener("pageshow", applyMagicLinkPatch);
   new MutationObserver(applyMagicLinkPatch).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+
+// Restore standard login and first-time password creation for registered Access Control users.
+(function standardLoginFirstTimeInstaller() {
+  if (window.__standardLoginWithFirstTimePatch) return;
+  window.__standardLoginWithFirstTimePatch = true;
+
+  var APP_URL = "https://citi-homes.github.io/HRMS/";
+  var originalRemove = Element.prototype.remove;
+  var textDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+
+  Element.prototype.remove = function () {
+    if (document.documentElement.dataset.loginMode === "password") {
+      if (this.id === "password" || this.id === "passwordToggle" || (this.querySelector && this.querySelector("#password")) || (this.classList && this.classList.contains("password-field"))) return;
+    }
+    return originalRemove.call(this);
+  };
+
+  if (textDescriptor && textDescriptor.set && !window.__loginTextSetterPatched) {
+    window.__loginTextSetterPatched = true;
+    Object.defineProperty(Node.prototype, "textContent", {
+      get: textDescriptor.get,
+      set: function (value) {
+        var next = value;
+        if (this && this.matches && this.matches('#loginForm button[type="submit"]') && value === "Send Magic Link") {
+          next = document.documentElement.dataset.loginMode === "first_time" ? "Send Create Password Link" : "Login";
+        }
+        return textDescriptor.set.call(this, next);
+      }
+    });
+  }
+
+  function loginMessage(text, tone) {
+    var node = document.getElementById("loginMessage");
+    if (!node) return;
+    node.textContent = text || "";
+    node.style.color = tone === "error" ? "#b23b32" : tone === "success" ? "#4f6f4b" : "";
+  }
+
+  function formShell() {
+    var oldForm = document.getElementById("loginForm");
+    if (!oldForm) return null;
+    var form = oldForm.cloneNode(false);
+    form.id = "loginForm";
+    form.className = oldForm.className || "login-form";
+    form.method = "post";
+    form.action = "javascript:void(0)";
+    oldForm.parentNode.replaceChild(form, oldForm);
+    return form;
+  }
+
+  function setupPasswordToggle() {
+    var input = document.getElementById("password");
+    var button = document.getElementById("passwordToggle");
+    if (!input || !button) return;
+    function show() { input.type = "text"; button.textContent = "Eye"; }
+    function hide() { input.type = "password"; button.textContent = "Eye"; }
+    button.addEventListener("mousedown", show);
+    button.addEventListener("touchstart", show);
+    button.addEventListener("mouseup", hide);
+    button.addEventListener("mouseleave", hide);
+    button.addEventListener("touchend", hide);
+  }
+
+  function renderPasswordLogin() {
+    document.documentElement.dataset.loginMode = "password";
+    var form = formShell();
+    if (!form) return;
+    form.innerHTML = [
+      '<label>Email',
+      '<input id="username" type="email" autocomplete="username" placeholder="admin@citihomes.ae" required>',
+      '</label>',
+      '<label>Password',
+      '<span class="password-field">',
+      '<input id="password" type="password" autocomplete="current-password" placeholder="Password" required>',
+      '<button id="passwordToggle" type="button" aria-label="Hold to show password">Eye</button>',
+      '</span>',
+      '</label>',
+      '<p class="magic-link-note" hidden></p>',
+      '<button type="submit">Login</button>',
+      '<button type="button" class="first-time-link" id="firstTimePasswordLink">First time user? Create password</button>',
+      '<p id="loginMessage" class="form-message"></p>'
+    ].join('');
+    setupPasswordToggle();
+    var firstTimeLink = document.getElementById("firstTimePasswordLink");
+    if (firstTimeLink) firstTimeLink.addEventListener("click", renderFirstTimeRequest);
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      try {
+        loginMessage("", "");
+        var button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        button.textContent = "Logging in...";
+        state.session = await signIn(document.getElementById("username").value, document.getElementById("password").value);
+        renderShell();
+        renderDashboard();
+        loadDashboardData({ optional: true }).then(function () { if (state.page === "dashboard") renderDashboard(); }).catch(function (error) { console.warn("Dashboard data loaded after login with warnings", error); });
+        loadHierarchyData().then(function () { if (state.page === "dashboard") renderDashboard(); }).catch(function (error) { console.warn("Hierarchy loaded after login with warnings", error); });
+      } catch (error) {
+        loginMessage((error && error.message) || String(error), "error");
+      } finally {
+        var doneButton = form.querySelector('button[type="submit"]');
+        if (doneButton) { doneButton.disabled = false; doneButton.textContent = "Login"; }
+      }
+    });
+  }
+
+  async function isRegisteredForPortal(email) {
+    var cleanEmail = String(email || "").trim().toLowerCase();
+    if (!cleanEmail) throw new Error("Please enter your registered email address.");
+    if (!cleanEmail.endsWith("@citihomes.ae")) throw new Error("Please use your registered Citi Homes email address.");
+    var result = await client.rpc("is_admin_portal_email", { p_email: cleanEmail });
+    if (result.error) throw new Error("Access Control check is not ready. Please contact the super user.");
+    if (!result.data) throw new Error("This email is not active in Access Control. Please ask the super user to add your profile first.");
+    return cleanEmail;
+  }
+
+  function renderFirstTimeRequest() {
+    document.documentElement.dataset.loginMode = "first_time";
+    var form = formShell();
+    if (!form) return;
+    form.innerHTML = [
+      '<label>Registered Email',
+      '<input id="username" type="email" autocomplete="email" placeholder="yourname@citihomes.ae" required>',
+      '</label>',
+      '<p class="magic-link-note">Only emails already added by the super user in Access Control can create a password.</p>',
+      '<button type="submit">Send Create Password Link</button>',
+      '<button type="button" class="first-time-link" id="backToLogin">Back to normal login</button>',
+      '<p id="loginMessage" class="form-message"></p>'
+    ].join('');
+    var back = document.getElementById("backToLogin");
+    if (back) back.addEventListener("click", renderPasswordLogin);
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      var button = form.querySelector('button[type="submit"]');
+      try {
+        if (!client) throw new Error("Supabase connection is not ready.");
+        button.disabled = true;
+        button.textContent = "Sending...";
+        loginMessage("", "");
+        var cleanEmail = await isRegisteredForPortal(document.getElementById("username") && document.getElementById("username").value);
+        var result = await client.auth.resetPasswordForEmail(cleanEmail, { redirectTo: APP_URL + "?first_time_password=1" });
+        if (result.error) throw result.error;
+        loginMessage("Create-password link sent to " + cleanEmail + ". Open your email and follow the link.", "success");
+      } catch (error) {
+        loginMessage((error && error.message) || String(error), "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Send Create Password Link";
+      }
+    });
+  }
+
+  function showPasswordCreateOverlay() {
+    if (document.getElementById("createPasswordOverlay")) return;
+    var overlay = document.createElement("div");
+    overlay.id = "createPasswordOverlay";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:rgba(0,0,0,.28);backdrop-filter:blur(10px);";
+    overlay.innerHTML = [
+      '<form id="createPasswordForm" style="width:min(520px,92vw);padding:28px;border-radius:26px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.72);box-shadow:0 24px 70px rgba(0,0,0,.18);font-family:inherit;">',
+      '<h2 style="margin:0 0 8px;font-size:30px;">Create your password</h2>',
+      '<p style="margin:0 0 18px;color:#6f6a60;">Set your private HRMS password. After saving, use normal email/password login.</p>',
+      '<label style="display:block;margin-bottom:12px;">New password<input id="newHrmsPassword" type="password" minlength="8" required style="width:100%;margin-top:8px;padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.55);"></label>',
+      '<label style="display:block;margin-bottom:12px;">Confirm password<input id="confirmHrmsPassword" type="password" minlength="8" required style="width:100%;margin-top:8px;padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.55);"></label>',
+      '<label style="display:flex;gap:10px;align-items:center;margin:12px 0 18px;"><input id="showCreatedPassword" type="checkbox">Show password</label>',
+      '<button type="submit" style="width:100%;border:0;border-radius:22px;padding:15px;background:linear-gradient(135deg,#343434,#9c8341);color:white;font-weight:700;font-size:17px;">Save Password</button>',
+      '<p id="createPasswordMessage" style="margin:14px 0 0;color:#b23b32;font-weight:700;"></p>',
+      '</form>'
+    ].join('');
+    document.body.appendChild(overlay);
+    var showCheckbox = document.getElementById("showCreatedPassword");
+    if (showCheckbox) showCheckbox.addEventListener("change", function () {
+      var type = this.checked ? "text" : "password";
+      document.getElementById("newHrmsPassword").type = type;
+      document.getElementById("confirmHrmsPassword").type = type;
+    });
+    var passwordForm = document.getElementById("createPasswordForm");
+    if (passwordForm) passwordForm.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      var message = document.getElementById("createPasswordMessage");
+      var first = document.getElementById("newHrmsPassword").value;
+      var second = document.getElementById("confirmHrmsPassword").value;
+      try {
+        if (first.length < 8) throw new Error("Password must be at least 8 characters.");
+        if (first !== second) throw new Error("Passwords do not match.");
+        var update = await client.auth.updateUser({ password: first });
+        if (update.error) throw update.error;
+        message.style.color = "#4f6f4b";
+        message.textContent = "Password saved successfully. Opening HRMS...";
+        history.replaceState(null, document.title, location.pathname);
+        var sessionResult = await client.auth.getSession();
+        state.session = sessionResult.data.session;
+        state.portalUser = await verifyPortalAccess();
+        overlay.remove();
+        renderShell();
+        renderDashboard();
+        loadDashboardData({ optional: true }).then(function () { if (state.page === "dashboard") renderDashboard(); });
+      } catch (error) {
+        message.style.color = "#b23b32";
+        message.textContent = (error && error.message) || String(error);
+      }
+    });
+  }
+
+  function maybeShowCreatePassword() {
+    var isCreatePasswordReturn = location.search.indexOf("first_time_password=1") >= 0 || /type=recovery|access_token|refresh_token/.test(location.hash || "");
+    if (!isCreatePasswordReturn || !client) return;
+    setTimeout(async function () {
+      var sessionResult = await client.auth.getSession();
+      if (sessionResult.data.session) showPasswordCreateOverlay();
+    }, 900);
+  }
+
+  function bootPatch() {
+    var loginVisible = document.getElementById("loginView") && !document.getElementById("loginView").hidden;
+    if (loginVisible && document.documentElement.dataset.loginMode !== "first_time") renderPasswordLogin();
+    maybeShowCreatePassword();
+  }
+
+  bootPatch();
+  window.addEventListener("load", bootPatch);
+  window.addEventListener("pageshow", bootPatch);
+})();
