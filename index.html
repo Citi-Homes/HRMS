@@ -1040,8 +1040,11 @@ async function createAccessProfile(form) {
     p_can_manage_pantry: Boolean(payload.can_manage_pantry)
   };
 
-  const { error: rpcError } = await client.rpc("upsert_admin_portal_user_profile", rpcPayload);
-  if (rpcError) throw rpcError;
+  const saveResult = await Promise.race([
+    client.rpc("upsert_admin_portal_user_profile", rpcPayload),
+    new Promise((_, reject) => window.setTimeout(() => reject(new Error("Supabase save is taking too long. Please check connection and try again.")), 15000))
+  ]);
+  if (saveResult.error) throw saveResult.error;
 
   const sessionSnapshot = state.session;
   window.setTimeout(async () => {
@@ -1660,7 +1663,18 @@ $("#recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const page = pages.find((item) => item.key === state.page);
   if (page.key === "access_control") {
-    await createAccessProfile(event.currentTarget);
+    try {
+      await createAccessProfile(event.currentTarget);
+    } catch (error) {
+      const message = $("#accessControlMessage");
+      if (message) {
+        message.textContent = error?.message || String(error);
+        message.classList.add("error");
+        message.classList.remove("success");
+      } else {
+        alert(error?.message || error);
+      }
+    }
     return;
   }
   if (page.key === "hierarchy") {
@@ -1772,7 +1786,7 @@ document.addEventListener("change", async (event) => {
 })();
 
   </script>
-  <script src="assets/recruitment-tools.js?v=access-create-direct-20260722"></script>
+  <script src="assets/recruitment-tools.js?v=access-create-visible-errors-20260722"></script>
   <script>
     (function () {
       function normalizeLogoutText() {
