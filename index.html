@@ -1727,10 +1727,15 @@ document.addEventListener("change", async (event) => {
     renderShell();
     return;
   }
+  const passwordRecoveryLaunch = window.location.href.includes("type=recovery") || window.location.hash.includes("type=recovery") || window.location.href.includes("access_token=") || window.location.hash.includes("access_token=") || window.location.href.includes("code=");
+  window.__chPasswordRecoveryLaunch = passwordRecoveryLaunch;
   const { data } = await client.auth.getSession();
-  state.session = data.session;
+  state.session = passwordRecoveryLaunch ? null : data.session;
   renderShell();
-  if (state.session) {
+  if (passwordRecoveryLaunch && data.session) {
+    window.__chPasswordRecoverySessionReady = true;
+    window.dispatchEvent(new Event("ch:password-recovery-ready"));
+  } else if (state.session) {
     state.portalUser = await verifyPortalAccess();
     renderShell();
     renderDashboard();
@@ -1748,7 +1753,7 @@ document.addEventListener("change", async (event) => {
 })();
 
   </script>
-  <script src="assets/recruitment-tools.js?v=secure-reset-flow-clean-20260723"></script>
+  <script src="assets/recruitment-tools.js?v=secure-reset-recovery-guard-20260723"></script>
   <script>
     (function () {
       function normalizeLogoutText() {
