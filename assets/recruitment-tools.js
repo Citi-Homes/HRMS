@@ -1770,3 +1770,36 @@
   document.addEventListener("DOMContentLoaded", cleanupOldResetLinks);
   new MutationObserver(cleanupOldResetLinks).observe(document.body, { childList: true, subtree: true });
 })();
+
+
+// Ensure Supabase recovery links land on Create New Password, not inside the app.
+(function () {
+  window.__chRecoveryPasswordPanelGuard = true;
+  function shouldShowCreatePassword() {
+    var href = window.location.href;
+    var hash = window.location.hash || "";
+    return Boolean(window.__chPasswordRecoveryLaunch || window.__chPasswordRecoverySessionReady || href.includes("type=recovery") || hash.includes("type=recovery") || href.includes("access_token=") || hash.includes("access_token=") || href.includes("code="));
+  }
+  function forceCreatePasswordPanel() {
+    if (!shouldShowCreatePassword()) return;
+    var loginView = document.getElementById("loginView");
+    var appView = document.getElementById("appView");
+    var loginForm = document.getElementById("loginForm");
+    var requestPanel = document.getElementById("resetRequestPanel");
+    var createPanel = document.getElementById("createPasswordPanel");
+    var resetLink = document.getElementById("firstTimeResetLink");
+    if (loginView) loginView.style.display = "";
+    if (appView) appView.style.display = "none";
+    if (loginForm) loginForm.style.display = "none";
+    if (requestPanel) requestPanel.style.display = "none";
+    if (createPanel) createPanel.style.display = "grid";
+    if (resetLink) resetLink.style.display = "none";
+  }
+  window.addEventListener("ch:password-recovery-ready", function () {
+    window.setTimeout(forceCreatePasswordPanel, 100);
+    window.setTimeout(forceCreatePasswordPanel, 800);
+  });
+  window.setTimeout(forceCreatePasswordPanel, 300);
+  window.setTimeout(forceCreatePasswordPanel, 1200);
+  window.setTimeout(forceCreatePasswordPanel, 2500);
+})();
