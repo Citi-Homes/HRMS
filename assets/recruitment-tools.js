@@ -1586,3 +1586,168 @@
   try { createAccessProfile = authLinkedCreateAccessProfile; } catch (error) {}
   window.createAccessProfile = authLinkedCreateAccessProfile;
 })();
+
+
+// Secure first-time login / reset password flow.
+// This only touches the login reset path and uses the Supabase Edge Function.
+(function () {
+  window.__chSecurePasswordResetFlow = true;
+  var RESET_FUNCTION_URL = "https://xcddssirxwhywvhspica.supabase.co/functions/v1/send-password-reset";
+
+  function getLoginPanel() {
+    return document.querySelector(".login-panel") || document.getElementById("loginView");
+  }
+
+  function getConfig() {
+    return window.CITI_HOMES_SUPABASE || {};
+  }
+
+  function resetMarkup() {
+    return '' +
+      '<div id="resetRequestPanel" class="login-form" style="display:none; gap:14px; margin-top:18px;">' +
+        '<h2 style="margin:0; font-size:28px;">Create or Reset Your Password</h2>' +
+        '<p class="login-copy" style="margin:0; text-align:left;">Enter your registered email. If approved in Access Control, a secure password link will be sent to you.</p>' +
+        '<label>Registered Email<input id="resetEmail" type="email" autocomplete="email" placeholder="name@citihomes.ae" required></label>' +
+        '<button id="sendResetLinkButton" type="button">Send Secure Link</button>' +
+        '<button id="backToLoginButton" type="button" class="ghost-button" style="background:rgba(255,255,255,.34); color:#2a2927;">Back to Login</button>' +
+        '<p id="resetMessage" class="form-message"></p>' +
+      '</div>' +
+      '<div id="createPasswordPanel" class="login-form" style="display:none; gap:14px; margin-top:18px;">' +
+        '<h2 style="margin:0; font-size:28px;">Create New Password</h2>' +
+        '<p class="login-copy" style="margin:0; text-align:left;">Create your own password. This will become your permanent HRMS login password.</p>' +
+        '<label>New Password<input id="newResetPassword" type="password" autocomplete="new-password" placeholder="New password" required></label>' +
+        '<label>Confirm Password<input id="confirmResetPassword" type="password" autocomplete="new-password" placeholder="Confirm password" required></label>' +
+        '<label style="display:flex; align-items:center; gap:10px; flex-direction:row;"><input id="showResetPassword" type="checkbox" style="width:auto;"> Show password</label>' +
+        '<button id="saveNewPasswordButton" type="button">Save Password</button>' +
+        '<p id="createPasswordMessage" class="form-message"></p>' +
+      '</div>';
+  }
+
+  function setMessage(id, text, tone) {
+    var node = document.getElementById(id);
+    if (!node) return;
+    node.textContent = text || "";
+    node.classList.toggle("success", tone === "success");
+    node.classList.toggle("error", tone === "error");
+  }
+
+  function showPanel(panelId) {
+    var loginForm = document.getElementById("loginForm");
+    var requestPanel = document.getElementById("resetRequestPanel");
+    var createPanel = document.getElementById("createPasswordPanel");
+    if (loginForm) loginForm.style.display = panelId ? "none" : "";
+    if (requestPanel) requestPanel.style.display = panelId === "resetRequestPanel" ? "grid" : "none";
+    if (createPanel) createPanel.style.display = panelId === "createPasswordPanel" ? "grid" : "none";
+  }
+
+  function looksLikeRecoveryUrl() {
+    var text = window.location.href;
+    return text.includes("type=recovery") || text.includes("access_token=") || text.includes("refresh_token=") || text.includes("code=");
+  }
+
+  async function sendSecureResetLink() {
+    var button = document.getElementById("sendResetLinkButton");
+    var emailInput = document.getElementById("resetEmail");
+    var email = String((emailInput && emailInput.value) || "").trim().toLowerCase();
+    var cfg = getConfig();
+    if (!email || !email.includes("@")) {
+      setMessage("resetMessage", "Please enter your registered email.", "error");
+      return;
+    }
+    if (!cfg.anonKey) {
+      setMessage("resetMessage", "Reset service is not ready. Please contact HRMS admin.", "error");
+      return;
+    }
+    try {
+      if (button) { button.disabled = true; button.textContent = "Sending..."; }
+      setMessage("resetMessage", "Checking Access Control and sending secure link...");
+      var response = await fetch(RESET_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": cfg.anonKey,
+          "Authorization": "Bearer " + cfg.anonKey
+        },
+        body: JSON.stringify({ email: email })
+      });
+      var payload = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(payload.error || "Unable to send reset link.");
+      setMessage("resetMessage", payload.message || "Secure reset link sent to your registered email.", "success");
+    } catch (error) {
+      setMessage("resetMessage", error.message || "Unable to send reset link.", "error");
+    } finally {
+      if (button) { button.disabled = false; button.textContent = "Send Secure Link"; }
+    }
+  }
+
+  async function saveNewPassword() {
+    var button = document.getElementById("saveNewPasswordButton");
+    var password = String((document.getElementById("newResetPassword") || {}).value || "");
+    var confirm = String((document.getElementById("confirmResetPassword") || {}).value || "");
+    if (password.length < 8) {
+      setMessage("createPasswordMessage", "Password must be at least 8 characters.", "error");
+      return;
+    }
+    if (password !== confirm) {
+      setMessage("createPasswordMessage", "New password and confirm password do not match.", "error");
+      return;
+    }
+    try {
+      if (button) { button.disabled = true; button.textContent = "Saving..."; }
+      setMessage("createPasswordMessage", "Saving your new password...");
+      if (!client) throw new Error("Supabase connection is not ready.");
+      var result = await client.auth.updateUser({ password: password });
+      if (result.error) throw result.error;
+      setMessage("createPasswordMessage", "Password updated. You can now login with your new password.", "success");
+      window.setTimeout(function () {
+        try { client.auth.signOut(); } catch (error) {}
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showPanel(null);
+      }, 1800);
+    } catch (error) {
+      setMessage("createPasswordMessage", error.message || "Unable to save password.", "error");
+    } finally {
+      if (button) { button.disabled = false; button.textContent = "Save Password"; }
+    }
+  }
+
+  function installResetFlow() {
+    var panel = getLoginPanel();
+    var loginForm = document.getElementById("loginForm");
+    if (!panel || !loginForm || document.getElementById("resetRequestPanel")) return;
+
+    loginForm.insertAdjacentHTML("afterend", '<button id="firstTimeResetLink" type="button" class="reset-link-button" style="margin-top:12px; background:transparent; border:0; color:#8d7641; font-weight:700; cursor:pointer;">First time login / Reset password</button>' + resetMarkup());
+
+    var link = document.getElementById("firstTimeResetLink");
+    var send = document.getElementById("sendResetLinkButton");
+    var back = document.getElementById("backToLoginButton");
+    var save = document.getElementById("saveNewPasswordButton");
+    var show = document.getElementById("showResetPassword");
+
+    if (link) link.addEventListener("click", function () { showPanel("resetRequestPanel"); });
+    if (send) send.addEventListener("click", sendSecureResetLink);
+    if (back) back.addEventListener("click", function () { showPanel(null); });
+    if (save) save.addEventListener("click", saveNewPassword);
+    if (show) show.addEventListener("change", function () {
+      var type = show.checked ? "text" : "password";
+      var pass = document.getElementById("newResetPassword");
+      var confirm = document.getElementById("confirmResetPassword");
+      if (pass) pass.type = type;
+      if (confirm) confirm.type = type;
+    });
+
+    if (looksLikeRecoveryUrl()) {
+      showPanel("createPasswordPanel");
+    }
+  }
+
+  installResetFlow();
+  document.addEventListener("DOMContentLoaded", installResetFlow);
+  new MutationObserver(installResetFlow).observe(document.body, { childList: true, subtree: true });
+
+  if (client && client.auth && client.auth.onAuthStateChange) {
+    client.auth.onAuthStateChange(function (event) {
+      if (event === "PASSWORD_RECOVERY") showPanel("createPasswordPanel");
+    });
+  }
+})();
