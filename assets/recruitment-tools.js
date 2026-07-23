@@ -1751,3 +1751,22 @@
     });
   }
 })();
+
+
+// Remove previous first-time password wording so only the secure reset flow remains visible.
+(function () {
+  window.__chResetDuplicateCleanup = true;
+  function cleanupOldResetLinks() {
+    Array.from(document.querySelectorAll("button, a, p, div")).forEach(function (node) {
+      if (node.id === "firstTimeResetLink" || node.closest && node.closest("#resetRequestPanel, #createPasswordPanel")) return;
+      var text = (node.textContent || "").trim();
+      if (text === "First time user? Create password") {
+        node.style.display = "none";
+        node.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
+  cleanupOldResetLinks();
+  document.addEventListener("DOMContentLoaded", cleanupOldResetLinks);
+  new MutationObserver(cleanupOldResetLinks).observe(document.body, { childList: true, subtree: true });
+})();
