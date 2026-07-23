@@ -115,7 +115,8 @@ const pages = [
   { key: "documents", label: "Visa & Documents", table: "documents" },
   { key: "pantry", label: "Pantry Management", table: "pantry" },
   { key: "utilities", label: "Utility Bills", table: "utilities" },
-  { key: "inventory", label: "Office Inventory", table: "inventory" },
+  { key: "inventory", label: "Office Assets", table: "inventory" },
+  { key: "store", label: "Store", table: "store" },
   { key: "vendors", label: "Vendor Database", table: "vendors" },
   { key: "tasks", label: "P&C Task Calendar", table: "tasks" },
   { key: "hierarchy", label: "Hierarchy" },
@@ -221,15 +222,16 @@ function canViewTable(table) {
   const permissions = {
     employees: "can_view_employee_master",
     recruitment: "can_view_recruitment",
-    interview_evaluation: "can_view_recruitment",
-    joining_checklist: "can_view_employee_master",
+    interview_evaluation: "can_view_interview_evaluation",
+    joining_checklist: "can_view_joining_checklist",
     leave_management: "can_manage_leave",
-    documents: "can_view_employee_master",
+    documents: "can_view_documents",
     vendors: "can_manage_vendors",
     inventory: "can_manage_inventory",
+    store: "can_manage_store",
     pantry: "can_manage_pantry",
-    utilities: "can_manage_vendors",
-    tasks: "can_manage_leave"
+    utilities: "can_manage_utilities",
+    tasks: "can_manage_tasks"
   };
   const permission = permissions[table];
   return permission ? Boolean(state.portalUser?.[permission]) : false;
@@ -818,15 +820,16 @@ const accessPermissionFields = [
   { key: "can_view_attendance", label: "Attendance Portal" },
   { key: "can_view_employee_master", label: "Employee Master" },
   { key: "can_view_recruitment", label: "Recruitment Tracker" },
-  { key: "can_view_recruitment", uiKey: "can_view_interview_evaluation", label: "Interview Evaluation" },
-  { key: "can_view_employee_master", uiKey: "can_view_joining_checklist", label: "Joining Checklist" },
+  { key: "can_view_interview_evaluation", label: "Interview Evaluation" },
+  { key: "can_view_joining_checklist", label: "Joining Checklist" },
   { key: "can_manage_leave", label: "Leave Management" },
-  { key: "can_view_employee_master", uiKey: "can_view_documents", label: "Visa & Documents" },
+  { key: "can_view_documents", label: "Visa & Documents" },
   { key: "can_manage_pantry", label: "Pantry Management" },
-  { key: "can_manage_vendors", uiKey: "can_manage_utilities", label: "Utility Bills" },
-  { key: "can_manage_inventory", label: "Office Inventory" },
+  { key: "can_manage_utilities", label: "Utility Bills" },
+  { key: "can_manage_inventory", label: "Office Assets" },
+  { key: "can_manage_store", label: "Store" },
   { key: "can_manage_vendors", label: "Vendor Database" },
-  { key: "can_manage_leave", uiKey: "can_manage_tasks", label: "P&C Task Calendar" }
+  { key: "can_manage_tasks", label: "P&C Task Calendar" }
 ];
 
 function accessPermissionInputKey(item) {
@@ -858,7 +861,7 @@ function applyAccessLevelDefaults(form) {
 }
 
 async function fetchAccessProfiles() {
-  const profileColumns = "team_member_id,team_member_name,email,role,access_level,is_active,can_view_attendance,can_view_employee_master,can_view_recruitment,can_manage_leave,can_manage_vendors,can_manage_inventory,can_manage_pantry";
+  const profileColumns = "team_member_id,team_member_name,email,role,access_level,is_active,can_view_attendance,can_view_employee_master,can_view_recruitment,can_view_interview_evaluation,can_view_joining_checklist,can_manage_leave,can_view_documents,can_manage_vendors,can_manage_inventory,can_manage_store,can_manage_pantry,can_manage_utilities,can_manage_tasks";
   const rpcResult = await client.rpc("get_admin_portal_users_for_superuser");
   if (!rpcResult.error && Array.isArray(rpcResult.data)) return rpcResult.data;
 
@@ -1753,7 +1756,7 @@ document.addEventListener("change", async (event) => {
 })();
 
   </script>
-  <script src="assets/recruitment-tools.js?v=secure-reset-recovery-guard-20260723"></script>
+  <script src="assets/recruitment-tools.js?v=strict-permissions-20260723"></script>
   <script>
     (function () {
       function normalizeLogoutText() {
