@@ -1521,3 +1521,68 @@
   try { createAccessProfile = profileOnlyCreateAccessProfile; } catch (error) {}
   window.createAccessProfile = profileOnlyCreateAccessProfile;
 })();
+
+
+// Final Access Control creation flow for current Supabase schema.
+// auth_user_id is required, so create Auth user through an isolated client first.
+(function () {
+  window.__chAccessProfileAuthLinkedFinalV3 = true;
+
+  function setAccessCreateMessage(text, tone) {
+    var node = document.getElementById("accessControlMessage");
+    if (!node) return;
+    node.textContent = text || "";
+    node.classList.toggle("success", tone === "success");
+    node.classList.toggle("error", tone === "error");
+  }
+
+  async function createAuthUserWithoutChangingSession(email, password) {
+    var cfg = window.CITI_HOMES_SUPABASE || {};
+    if (!window.supabase || !cfg.url || !cfg.anonKey) {
+      throw new Error("Supabase connection is not ready.");
+    }
+    var authClient = window.supabase.createClient(cfg.url, cfg.anonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storageKey: "ch-access-create-" + Date.now()
+      }
+    });
+    var result = await authClient.auth.signUp({ email: email, password: password });
+    if (result.error) throw result.error;
+    var authUserId = result.data && result.data.user && result.data.user.id;
+    if (!authUserId) throw new Error("Supabase did not return the new Auth user ID.");
+    try { await authClient.auth.signOut(); } catch (error) {}
+    return authUserId;
+  }
+
+  var authLinkedCreateAccessProfile = async function (form) {
+    if (typeof isSuperUser === "function" && !isSuperUser()) {
+      throw new Error("Only the superuser can create access profiles.");
+    }
+    if (!client) throw new Error("Supabase connection is not ready.");
+
+    setAccessCreateMessage("Creating login account...");
+    var payload = accessFormPayload(form);
+    if (!payload.team_member_id || !payload.team_member_name || !payload.email || !payload.password) {
+      throw new Error("Please fill Team Member ID, Name, Email and Temporary Password.");
+    }
+
+    var authUserId = await createAuthUserWithoutChangingSession(payload.email, payload.password);
+
+    setAccessCreateMessage("Saving access profile...");
+    var profilePayload = Object.assign({}, payload, { auth_user_id: authUserId });
+    delete profilePayload.password;
+
+    var result = await client.from("admin_portal_users").insert(profilePayload);
+    if (result.error) throw result.error;
+
+    form.reset();
+    if (typeof renderAccessControlPage === "function") await renderAccessControlPage();
+    setAccessCreateMessage("Profile and login created for " + payload.email + ".", "success");
+  };
+
+  try { createAccessProfile = authLinkedCreateAccessProfile; } catch (error) {}
+  window.createAccessProfile = authLinkedCreateAccessProfile;
+})();
