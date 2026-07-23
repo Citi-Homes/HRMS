@@ -331,6 +331,35 @@ async function upsertRow(table, row) {
   return data;
 }
 
+async function submitLeaveRequest(row) {
+  const { data, error } = await client.rpc("submit_leave_request", {
+    p_employee: row.employee || null,
+    p_leave_type: row.leave_type || null,
+    p_start_date: row.start_date || null,
+    p_end_date: row.end_date || null,
+    p_requested_days: Number(row.requested_days || 0),
+    p_accrued_to_date: row.accrued_to_date ?? null,
+    p_used: row.used ?? null,
+    p_remaining: row.remaining ?? null,
+    p_remarks: row.remarks || null
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function approveLeaveRequest(row) {
+  const { data, error } = await client.rpc("approve_leave_request", {
+    p_leave_id: Number(row.id),
+    p_status: row.approval_status,
+    p_requested_days: row.requested_days ?? null,
+    p_accrued_to_date: row.accrued_to_date ?? null,
+    p_used: row.used ?? null,
+    p_remaining: row.remaining ?? null
+  });
+  if (error) throw error;
+  return data;
+}
+
 function isInterviewScheduled(row) {
   return String(row?.status || "").trim().toLowerCase() === "interview scheduled";
 }
@@ -795,19 +824,17 @@ async function updateLeaveApproval(id, status) {
   const isAnnual = String(existing.leave_type || "").toLowerCase() === "annual leave";
   const balance = leaveBalanceForEmployee(existing.employee, id);
   if (status === "Approved" && isAnnual && requestedDays > balance.remaining) {
-    throw new Error(`Annual leave balance is ${balance.remaining} day(s). Requested ${requestedDays} day(s).`);
+    throw new Error(`Annual leave balance is ${Math.round(balance.remaining)} day(s). Requested ${requestedDays} day(s).`);
   }
   const payload = {
     id: existing.id,
     approval_status: status,
     requested_days: requestedDays,
-    accrued_to_date: isAnnual ? balance.accrued : null,
-    used: isAnnual && status === "Approved" ? Number((balance.used + requestedDays).toFixed(2)) : balance.used,
-    remaining: isAnnual && status === "Approved" ? Number(Math.max(0, balance.remaining - requestedDays).toFixed(2)) : balance.remaining,
-    approved_by: normalizedEmail(),
-    approved_at: new Date().toISOString()
+    accrued_to_date: isAnnual ? Math.round(balance.accrued) : null,
+    used: isAnnual && status === "Approved" ? Math.round(balance.used + requestedDays) : Math.round(balance.used || 0),
+    remaining: isAnnual && status === "Approved" ? Math.round(Math.max(0, balance.remaining - requestedDays)) : Math.round(balance.remaining || 0)
   };
-  const saved = await upsertRow("leave_management", payload);
+  const saved = await approveLeaveRequest(payload);
   state.savedRows.add(`leave_management:${id}`);
   setTimeout(() => state.savedRows.delete(`leave_management:${id}`), 1800);
   state.rows.leave_management = await fetchRows("leave_management");
@@ -1653,9 +1680,7 @@ $("#recordForm").addEventListener("submit", async (event) => {
   if (page.table === "leave_management") {
     if (!canRequestLeave()) throw new Error("You do not have permission to submit leave requests.");
     const row = rowFromElement(event.currentTarget);
-    row.approval_status = "Pending";
-    row.requested_by = normalizedEmail();
-    row.submitted_at = new Date().toISOString();
+    row.approval_status = "Pending Approval";
     row.requested_days = Number(row.requested_days || daysBetweenInclusive(row.start_date, row.end_date));
     if (!row.requested_days) throw new Error("Please select valid leave dates or requested days.");
     const duplicateLeave = (state.rows.leave_management || []).some((item) =>
@@ -1671,14 +1696,14 @@ $("#recordForm").addEventListener("submit", async (event) => {
     }
     const balance = leaveBalanceForEmployee(row.employee);
     const isAnnual = String(row.leave_type || "").toLowerCase() === "annual leave";
-    row.accrued_to_date = isAnnual ? balance.accrued : null;
-    row.used = isAnnual ? balance.used : null;
-    row.remaining = isAnnual ? balance.remaining : null;
+    row.accrued_to_date = isAnnual ? Math.round(balance.accrued) : null;
+    row.used = isAnnual ? Math.round(balance.used || 0) : null;
+    row.remaining = isAnnual ? Math.round(balance.remaining || 0) : null;
     const submitButton = event.currentTarget.querySelector('[type="submit"]');
     if (submitButton?.disabled) return;
     if (submitButton) submitButton.disabled = true;
     try {
-      await upsertRow(page.table, row);
+      await submitLeaveRequest(row);
       state.rows[page.table] = await fetchRows(page.table);
       event.currentTarget.reset();
       await showPage(state.page);
