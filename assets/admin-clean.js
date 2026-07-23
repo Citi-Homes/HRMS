@@ -14,10 +14,28 @@ const pages = [
   { key: "documents", label: "Visa & Documents", table: "documents" },
   { key: "pantry", label: "Pantry Management", table: "pantry" },
   { key: "utilities", label: "Utility Bills", table: "utilities" },
-  { key: "inventory", label: "Office Inventory", table: "inventory" },
+  { key: "inventory", label: "Office Assets", table: "inventory" },
+  { key: "store", label: "Store", table: "store" },
   { key: "vendors", label: "Vendor Database", table: "vendors" },
   { key: "tasks", label: "P&C Task Calendar", table: "tasks" }
 ];
+
+const pageAccessAliases = {
+  dashboard: ["dashboard"],
+  employees: ["employees", "employee master", "employee_master", "employee-master"],
+  recruitment: ["recruitment", "recruitment tracker", "recruitment_tracker", "recruitment-tracker"],
+  interview_evaluation: ["interview evaluation", "interview_evaluation", "interview-evaluation"],
+  attendance: ["attendance", "attendance portal", "attendance_portal", "attendance-portal"],
+  joining_checklist: ["joining checklist", "joining_checklist", "joining-checklist"],
+  leave_management: ["leave management", "leave_management", "leave-management"],
+  documents: ["visa & documents", "visa and documents", "documents", "visa_documents", "visa-documents"],
+  pantry: ["pantry", "pantry management", "pantry_management", "pantry-management"],
+  utilities: ["utilities", "utility bills", "utility_bills", "utility-bills"],
+  inventory: ["inventory", "office inventory", "office assets", "office_inventory", "office_assets", "office-assets"],
+  store: ["store"],
+  vendors: ["vendors", "vendor database", "vendor_database", "vendor-database"],
+  tasks: ["tasks", "p&c task calendar", "pc task calendar", "p&c_task_calendar", "pc_task_calendar", "task calendar"]
+};
 
 const columns = {
   employees: ["employee_id", "name", "department", "designation", "nationality", "joining_date", "employment_type", "visa_status", "emirates_id_expiry", "passport_expiry", "mobile", "emergency_contact", "status"],
@@ -78,6 +96,63 @@ function normalizedEmail() {
   return String(state.session?.user?.email || "").toLowerCase();
 }
 
+
+function normalizeAccessToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/s+/g, " ")
+    .trim();
+}
+
+function collectAccessTokens(profile) {
+  const tokens = new Set();
+  const addToken = (value) => {
+    const normalized = normalizeAccessToken(value);
+    if (normalized) tokens.add(normalized);
+  };
+  const addValue = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(addValue);
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.entries(value).forEach(([key, allowed]) => {
+        if (allowed === true || allowed === "true" || allowed === 1 || allowed === "1") addToken(key);
+      });
+      return;
+    }
+    if (typeof value === "string") value.split(/[|,;
+]+/).forEach(addToken);
+  };
+
+  ["access_links", "accessLinks", "allowed_pages", "allowedPages", "permissions", "tabs", "links", "modules"].forEach((field) => {
+    if (profile && profile[field] !== undefined) addValue(profile[field]);
+  });
+
+  Object.entries(profile || {}).forEach(([key, value]) => {
+    if (value === true || value === "true" || value === 1 || value === "1") addToken(key);
+  });
+
+  return tokens;
+}
+
+function profileAllowsPage(page, profile = state.portalUser) {
+  if (!page) return false;
+  if (page.key === "dashboard") return true;
+  if (isSuperUser()) return true;
+  const tokens = collectAccessTokens(profile);
+  if (!tokens.size) return false;
+  const aliases = pageAccessAliases[page.key] || [page.key, page.label];
+  return aliases.map(normalizeAccessToken).some((alias) => tokens.has(alias));
+}
+
+function accessiblePages() {
+  return pages.filter((page) => profileAllowsPage(page));
+}
+
 function departmentGroup(value = "") {
   const text = String(value).toLowerCase();
   if (text.includes("procurement")) return "Procurement";
@@ -129,7 +204,7 @@ async function verifyPortalAccess() {
   if (!email) throw new Error("Unable to identify the signed-in account.");
   const { data, error } = await client
     .from("admin_portal_users")
-    .select("email,role,is_active")
+    .select("*")
     .eq("email", email)
     .eq("is_active", true)
     .maybeSingle();
@@ -179,7 +254,8 @@ function renderShell() {
   const email = state.session.user?.email || "Admin";
   $("#roleLabel").textContent = displayNameForEmail(email);
   $("#accessLabel").textContent = "Team Member";
-  $("#navList").innerHTML = pages.map((page) => (
+  if (!profileAllowsPage(pages.find((page) => page.key === state.page))) state.page = "dashboard";
+  $("#navList").innerHTML = accessiblePages().map((page) => (
     `<button class="nav-item ${state.page === page.key ? "active" : ""}" data-page="${page.key}">
       <span>${page.label}</span><span>${page.external ? "↗" : ""}</span>
     </button>`
@@ -400,7 +476,8 @@ async function ensurePageData(page, options = {}) {
 }
 
 async function showPage(key) {
-  const page = pages.find((item) => item.key === key) || pages[0];
+  const requestedPage = pages.find((item) => item.key === key) || pages[0];
+  const page = profileAllowsPage(requestedPage) ? requestedPage : pages[0];
   if (page.external) {
     window.open(page.external, "_blank", "noopener");
     return;
