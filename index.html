@@ -118,7 +118,7 @@ const pages = [
   { key: "access_control", label: "Access Control" }
 ];
 const columns = {
-  employees: ["employee_id", "name", "department", "designation", "nationality", "joining_date", "employment_type", "visa_status", "emirates_id_expiry", "passport_expiry", "mobile", "emergency_contact", "status"],
+  employees: ["employee_id", "name", "department", "designation", "nationality", "joining_date", "probation_completion_date", "employment_type", "visa_status", "emirates_id_expiry", "passport_expiry", "mobile", "emergency_contact", "status"],
   recruitment: ["candidate", "cv_link", "position", "source", "mobile", "location", "gcc_experience", "total_experience", "current_salary", "expected_salary", "notice_period", "interview_date", "status"],
   interview_evaluation: ["candidate", "position", "department", "interviewer_names", "interview_date", "technical_knowledge", "position_specific_skills", "relevant_experience", "problem_solving_ability", "teamwork", "communication_skills", "confidence_professionalism", "recommended_salary", "final_notice_period", "final_decision", "final_remarks"],
   joining_checklist: ["employee", "offer_letter", "passport_copy", "visa", "emirates_id", "medical", "contract", "insurance", "bank_details", "probation_status", "probation_completion_date", "probation_remarks", "completed_pct"],
@@ -171,6 +171,7 @@ const $ = (selector) => document.querySelector(selector);
 
 function titleize(value) {
   if (value === "cv_link") return "CV Link";
+  if (value === "probation_completion_date") return "Probation Completion Date";
   return value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
@@ -711,11 +712,24 @@ function joiningChecklistForEmployee(employeeValue) {
 }
 
 function probationInfoForEmployee(employeeValue) {
+  const employee = employeeForLeave(employeeValue) || (typeof employeeValue === "object" ? employeeValue : null);
+  const employeeProbationDate = parseAppDate(employee?.probation_completion_date);
+  if (employeeProbationDate) {
+    const completed = employeeProbationDate <= parseAppDate(todayIso());
+    return {
+      record: employee,
+      status: completed ? "Completed" : "Under Probation",
+      completionDate: employeeProbationDate,
+      completed,
+      source: "Employee Master"
+    };
+  }
+
   const record = joiningChecklistForEmployee(employeeValue);
   const status = String(record?.probation_status || "Under Probation");
   const completionDate = parseAppDate(record?.probation_completion_date);
   const completed = status.toLowerCase() === "completed" && completionDate && completionDate <= parseAppDate(todayIso());
-  return { record, status, completionDate, completed };
+  return { record, status, completionDate, completed, source: "Joining Checklist" };
 }
 
 function annualLeaveEligibleForEmployee(employeeValue) {
@@ -749,7 +763,7 @@ function upcomingLeaveStatus(employee, rows = state.rows.leave_management || [])
 function leavePolicyPanel() {
   return `
     <div class="page-tools leave-policy-note">
-      <span class="viewer-notice">Annual leave is calculated from joining date, but eligibility starts only after probation is completed in Joining Checklist.</span>
+      <span class="viewer-notice">Annual leave is calculated from joining date, but eligibility starts only after the Employee Master probation completion date is reached.</span>
       <span class="viewer-notice">First year accrues at 2 days/month; after 1 year it accrues at 2.5 days/month. Approved Annual Leave only deducts the balance.</span>
     </div>
   `;
@@ -1722,7 +1736,7 @@ $("#recordForm").addEventListener("submit", async (event) => {
     const balance = leaveBalanceForEmployee(row.employee);
     const isAnnual = String(row.leave_type || "").toLowerCase() === "annual leave";
     if (isAnnual && !annualLeaveEligibleForEmployee(row.employee)) {
-      throw new Error("Annual Leave is available only after probation is completed in Joining Checklist.");
+      throw new Error("Annual Leave is available only after the probation completion date is reached.");
     }
     row.accrued_to_date = isAnnual ? Math.round(balance.accrued) : null;
     row.used = isAnnual ? Math.round(balance.used || 0) : null;
