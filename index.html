@@ -18,10 +18,10 @@
         <div class="brand-mark">CH</div>
         <div class="login-title-stack">
           <h1>Citi Homes</h1>
-          <p class="login-subtitle">Administration System</p>
+          <p class="login-subtitle">P&C Administration System</p>
         </div>
       </div>
-      <p class="login-copy">Source management dashboard for Operations, P&C and Administration, Recruitment, Attendance, Procurement and administration control.</p>
+      <p class="login-copy">People & Culture dashboard for employee records, recruitment, interviews, onboarding, attendance, leave and visa document control.</p>
       <form id="loginForm" class="login-form" method="post" action="javascript:void(0)">
         <label>Email
           <input id="username" type="email" autocomplete="username" placeholder="admin@citihomes.ae" required>
@@ -113,17 +113,11 @@ const pages = [
   { key: "attendance", label: "Attendance Portal", external: "https://citi-homes.github.io/Attendance.Portal/index.html" },
   { key: "leave_management", label: "Leave Management", table: "leave_management" },
   { key: "documents", label: "Visa & Documents", table: "documents" },
-  { key: "pantry", label: "Pantry Management", table: "pantry" },
-  { key: "utilities", label: "Utility Bills", table: "utilities" },
-  { key: "inventory", label: "Office Assets", table: "inventory" },
-  { key: "store", label: "Store", table: "store" },
-  { key: "vendors", label: "Vendor Database", table: "vendors" },
   { key: "tasks", label: "P&C Task Calendar", table: "tasks" },
   { key: "hierarchy", label: "Hierarchy" },
   { key: "access_control", label: "Access Control" }
 ];
-
-const columns = {
+const columns = {const columns = {
   employees: ["employee_id", "name", "department", "designation", "nationality", "joining_date", "employment_type", "visa_status", "emirates_id_expiry", "passport_expiry", "mobile", "emergency_contact", "status"],
   recruitment: ["candidate", "cv_link", "position", "source", "mobile", "location", "gcc_experience", "total_experience", "current_salary", "expected_salary", "notice_period", "interview_date", "status"],
   interview_evaluation: ["candidate", "position", "department", "interviewer_names", "interview_date", "technical_knowledge", "position_specific_skills", "relevant_experience", "problem_solving_ability", "teamwork", "communication_skills", "confidence_professionalism", "recommended_salary", "final_notice_period", "final_decision", "final_remarks"],
@@ -158,7 +152,7 @@ const displayNames = {
 
 const superUserEmails = new Set(["umer@citihomes.ae"]);
 const viewerEmails = new Set(["test@citihomes.ae"]);
-const dashboardTables = ["employees", "recruitment", "documents", "utilities"];
+const dashboardTables = ["employees", "recruitment", "leave_management", "documents"];
 
 let state = {
   session: null,
@@ -471,24 +465,24 @@ function renderDashboard() {
 
   const employeeCount = (state.rows.employees || []).filter((row) => rowVisibleByHierarchy("employees", row)).length;
   const recruitmentOpen = (state.rows.recruitment || []).filter((row) => !["Joined", "Rejected"].includes(row.status)).length;
+  const pendingLeave = (state.rows.leave_management || []).filter((row) => rowVisibleByHierarchy("leave_management", row) && String(row.approval_status || "Pending Approval").toLowerCase().includes("pending")).length;
   const documentsDue = (state.rows.documents || []).filter((row) => rowVisibleByHierarchy("documents", row) && row.status !== "Valid").length;
-  const utilityBillCount = (state.rows.utilities || []).length;
 
   $("#dashboard").innerHTML = `
     <div class="summary-grid">
       ${metric("Employees", employeeCount)}
       ${metric("Open Recruitment", recruitmentOpen)}
+      ${metric("Pending Leave", pendingLeave)}
       ${metric("Document Alerts", documentsDue)}
-      ${metric("Utility Bills", utilityBillCount)}
     </div>
     <div class="glass empty-state">
-      <h3>Citi Homes Administration</h3>
-      <p>Manage Operations, P&C, Administration, Procurement, recruitment, attendance, pantry, utility bills and office controls from one clean dashboard.</p>
+      <h3>Citi Homes P&C</h3>
+      <p>Manage employees, recruitment, interviews, onboarding, attendance, leave, visa documents, hierarchy and P&C tasks from one clean dashboard.</p>
     </div>
   `;
 }
 
-async function loadHierarchyData(options = {}) {
+async function loadHierarchyDataasync function loadHierarchyData(options = {}) {
   if (!options.force && state.rows.employee_hierarchy) return;
   try {
     state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
@@ -851,15 +845,16 @@ const accessPermissionFields = [
   { key: "can_view_joining_checklist", label: "Joining Checklist" },
   { key: "can_manage_leave", label: "Leave Management" },
   { key: "can_view_documents", label: "Visa & Documents" },
-  { key: "can_manage_pantry", label: "Pantry Management" },
-  { key: "can_manage_utilities", label: "Utility Bills" },
-  { key: "can_manage_inventory", label: "Office Assets" },
-  { key: "can_manage_store", label: "Store" },
-  { key: "can_manage_vendors", label: "Vendor Database" },
+  { key: "can_manage_pantry", label: "Pantry Management", hidden: true },
+  { key: "can_manage_utilities", label: "Utility Bills", hidden: true },
+  { key: "can_manage_inventory", label: "Office Assets", hidden: true },
+  { key: "can_manage_store", label: "Store", hidden: true },
+  { key: "can_manage_vendors", label: "Vendor Database", hidden: true },
   { key: "can_manage_tasks", label: "P&C Task Calendar" }
 ];
 
-function accessPermissionInputKey(item) {
+const visibleAccessPermissionFields = accessPermissionFields.filter((item) => !item.hidden);
+function accessPermissionInputKeyfunction accessPermissionInputKey(item) {
   return item.uiKey || item.key;
 }
 
@@ -926,7 +921,7 @@ function accessProfileRow(profile) {
       <td><input data-existing-access-field="access_level" class="table-input wide-text" type="text" value="${escapeHtml(profile.access_level || selectedLevel)}"></td>
       <td>
         <div class="access-check-grid table-access-grid">
-          ${accessPermissionFields.map((item) => `
+          ${visibleAccessPermissionFields.map((item) => `
             <label class="access-check"><input data-existing-access-permission="${accessPermissionInputKey(item)}" type="checkbox"${profile[item.key] ? " checked" : ""}>${item.label}</label>
           `).join("")}
         </div>
@@ -979,7 +974,7 @@ async function renderAccessControlPage() {
     </label>
     <label>Access Description<input data-access-field="access_level" type="text" placeholder="Limited access to selected modules"></label>
     <div class="access-check-grid">
-      ${accessPermissionFields.map((item) => `
+      ${visibleAccessPermissionFields.map((item) => `
         <label class="access-check"><input data-access-permission="${accessPermissionInputKey(item)}" type="checkbox">${item.label}</label>
       `).join("")}
     </div>
