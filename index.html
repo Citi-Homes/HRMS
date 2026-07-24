@@ -10,6 +10,37 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/admin.css?v=access-all-tabs-20260721">
+
+  <style>
+    .leave-policy-board { display: grid; gap: 14px; width: 100%; }
+    .leave-policy-card, .leave-workflow-card, .leave-tabs-card {
+      border: 1px solid rgba(255,255,255,.72);
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(255,255,255,.58), rgba(255,255,255,.26));
+      box-shadow: 0 18px 44px rgba(30,26,20,.15), inset 0 1px 0 rgba(255,255,255,.72);
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+    }
+    .leave-policy-card { padding: 18px; }
+    .leave-policy-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+    .leave-policy-header h3 { margin: 0; font-size: clamp(1.15rem, 1.6vw, 1.5rem); color: #242528; }
+    .leave-policy-badge { border: 1px solid rgba(157,132,72,.35); border-radius: 999px; padding: 8px 12px; color: #6f5d35; background: rgba(255,255,255,.34); font-weight: 700; white-space: nowrap; }
+    .leave-policy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .leave-policy-item { display: grid; grid-template-columns: 140px 1fr; gap: 14px; align-items: center; min-height: 76px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.62); background: rgba(255,255,255,.28); }
+    .leave-policy-item strong { color: #2a2b2e; font-size: 1rem; }
+    .leave-policy-item span { color: #6e675d; line-height: 1.45; }
+    .leave-workflow-card { padding: 14px 16px; display: grid; grid-template-columns: 160px 1fr; gap: 14px; align-items: center; }
+    .leave-workflow-card strong { color: #2a2b2e; }
+    .leave-workflow-card span { color: #5c6951; font-weight: 700; line-height: 1.45; }
+    .leave-tabs-card { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 12px; }
+    .leave-tab-button { border: 1px solid rgba(255,255,255,.64); border-radius: 14px; padding: 14px 12px; background: rgba(255,255,255,.36); color: #2d2e31; font-weight: 700; text-align: center; box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+    .leave-tab-button.primary { background: linear-gradient(135deg, rgba(91,112,78,.9), rgba(163,137,72,.86)); color: #fff; }
+    @media (max-width: 980px) {
+      .leave-policy-grid { grid-template-columns: 1fr; }
+      .leave-policy-item, .leave-workflow-card { grid-template-columns: 1fr; }
+      .leave-tabs-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
 </head>
 <body>
   <main id="loginView" class="login-shell">
@@ -761,10 +792,23 @@ function upcomingLeaveStatus(employee, rows = state.rows.leave_management || [])
 }
 
 function leavePolicyPanel() {
+  const approvalTab = isSuperUser() ? '<span class="leave-tab-button">Team Approvals</span>' : '';
   return `
-    <div class="page-tools leave-policy-note">
-      <span class="viewer-notice">Annual leave is calculated from joining date, but eligibility starts only after the Employee Master probation completion date is reached.</span>
-      <span class="viewer-notice">First year accrues at 2 days/month; after 1 year it accrues at 2.5 days/month. Approved Annual Leave only deducts the balance.</span>
+    <div class="leave-policy-board">
+      <section class="leave-policy-card">
+        <div class="leave-policy-header">
+          <h3>Leave Entitlement & Policy</h3>
+          <span class="leave-policy-badge">UAE-ready P&C rules</span>
+        </div>
+        <div class="leave-policy-grid">
+          <div class="leave-policy-item"><strong>Annual Leave</strong><span>Accrues from joining date; usable after the Employee Master probation completion date is reached. First year 24 days/year, after 1 year 30 days/year.</span></div>
+          <div class="leave-policy-item"><strong>Sick Leave</strong><span>After probation: 15 days full pay, 30 days half pay, 45 days unpaid.</span></div>
+          <div class="leave-policy-item"><strong>Special Leave</strong><span>Maternity, parental and bereavement / compassionate leave follow UAE Labour Law eligibility.</span></div>
+          <div class="leave-policy-item"><strong>Company Leave</strong><span>Work From Home, Emergency Leave and Unpaid Leave are approval-based and do not automatically deduct Annual Leave unless P&C approves.</span></div>
+        </div>
+      </section>
+      <section class="leave-workflow-card"><strong>Approval Workflow</strong><span>Team member submits request. Superuser or assigned approver reviews it. Approved Annual Leave deducts accrued balance; rejected or cancelled requests do not affect balance.</span></section>
+      <section class="leave-tabs-card"><span class="leave-tab-button primary">Leave Request</span><span class="leave-tab-button">My Leave Record</span>${approvalTab}<span class="leave-tab-button">Leave History</span><span class="leave-tab-button">Leave Settlement</span></section>
     </div>
   `;
 }
@@ -781,10 +825,12 @@ const summaryEmployee = currentLeaveEmployee();
   const remainingDays = Math.round(Number(summaryBalance.remaining || 0));
   const probationInfo = probationInfoForEmployee(employeeDisplay(summaryEmployee));
   const balanceText = probationInfo.completed ? (summaryBalance.used > 0 ? `${remainingDays} / ${accruedDays} Days` : `${accruedDays} Days`) : "Under Probation";
+  const pendingApprovalCount = (state.rows.leave_management || []).filter((row) => rowVisibleByHierarchy("leave_management", row) && String(row.approval_status || "Pending") === "Pending").length;
   $("#summaryCards").innerHTML = `
-    ${metric("Leave Eligibility", probationInfo.completed ? "Eligible" : "Under Probation")}
-    ${metric("Accrued as of today", balanceText)}
+    ${metric("Annual Leave Entitlement", probationInfo.completed ? (summaryBalance.serviceYears >= 1 ? "30 Days / Year" : "24 Days / Year") : "Under Probation")}
+    ${metric("Accrued Balance", balanceText)}
     ${metric("Upcoming Leave", upcomingLeaveStatus(summaryEmployee, state.rows.leave_management || []))}
+    ${metric("Approval Status", `${pendingApprovalCount} Pending`)}
   `;
   $("#pageTools").innerHTML = leavePolicyPanel();
 
