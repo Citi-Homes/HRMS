@@ -117,7 +117,7 @@ const pages = [
   { key: "hierarchy", label: "Hierarchy" },
   { key: "access_control", label: "Access Control" }
 ];
-const columns = {const columns = {
+const columns = {
   employees: ["employee_id", "name", "department", "designation", "nationality", "joining_date", "employment_type", "visa_status", "emirates_id_expiry", "passport_expiry", "mobile", "emergency_contact", "status"],
   recruitment: ["candidate", "cv_link", "position", "source", "mobile", "location", "gcc_experience", "total_experience", "current_salary", "expected_salary", "notice_period", "interview_date", "status"],
   interview_evaluation: ["candidate", "position", "department", "interviewer_names", "interview_date", "technical_knowledge", "position_specific_skills", "relevant_experience", "problem_solving_ability", "teamwork", "communication_skills", "confidence_professionalism", "recommended_salary", "final_notice_period", "final_decision", "final_remarks"],
@@ -854,7 +854,7 @@ const accessPermissionFields = [
 ];
 
 const visibleAccessPermissionFields = accessPermissionFields.filter((item) => !item.hidden);
-function accessPermissionInputKeyfunction accessPermissionInputKey(item) {
+function accessPermissionInputKey(item) {
   return item.uiKey || item.key;
 }
 
