@@ -482,7 +482,7 @@ function renderDashboard() {
   `;
 }
 
-async function loadHierarchyDataasync function loadHierarchyData(options = {}) {
+async function loadHierarchyData(options = {}) {
   if (!options.force && state.rows.employee_hierarchy) return;
   try {
     state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
