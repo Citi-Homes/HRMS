@@ -121,8 +121,8 @@ const columns = {
   employees: ["employee_id", "name", "department", "designation", "nationality", "joining_date", "employment_type", "visa_status", "emirates_id_expiry", "passport_expiry", "mobile", "emergency_contact", "status"],
   recruitment: ["candidate", "cv_link", "position", "source", "mobile", "location", "gcc_experience", "total_experience", "current_salary", "expected_salary", "notice_period", "interview_date", "status"],
   interview_evaluation: ["candidate", "position", "department", "interviewer_names", "interview_date", "technical_knowledge", "position_specific_skills", "relevant_experience", "problem_solving_ability", "teamwork", "communication_skills", "confidence_professionalism", "recommended_salary", "final_notice_period", "final_decision", "final_remarks"],
-  joining_checklist: ["employee", "offer_letter", "passport_copy", "visa", "emirates_id", "medical", "contract", "insurance", "bank_details", "completed_pct"],
-  leave_management: ["employee", "leave_type", "start_date", "end_date", "requested_days", "accrued_to_date", "used", "remaining", "approval_status", "approved_by", "approved_at", "remarks"],
+  joining_checklist: ["employee", "offer_letter", "passport_copy", "visa", "emirates_id", "medical", "contract", "insurance", "bank_details", "probation_status", "probation_completion_date", "probation_remarks", "completed_pct"],
+  leave_management: ["employee", "leave_type", "start_date", "end_date", "requested_days", "accrued_to_date", "used", "remaining", "approval_status", "leave_settlement", "approved_by", "approved_at", "remarks"],
   documents: ["employee", "document", "expiry_date", "reminder_date", "status"],
   pantry: ["month", "item", "opening", "purchased", "used", "closing", "required_next_month", "cost"],
   utilities: ["utility", "vendor", "invoice_date", "due_date", "amount", "status", "reminder_sent"],
@@ -140,7 +140,9 @@ const options = {
   visa_status: ["Not Started", "Processing", "Issued", "Renewal", "On Hold", "Cancelled"],
   contract_status: ["Active", "Pending", "Expired", "Renewal"],
   reminder_sent: ["No", "Yes"],
-  leave_type: ["Annual Leave", "Sick Leave", "Work From Home", "Emergency Leave"],
+  leave_type: ["Annual Leave", "Sick Leave", "Maternity Leave", "Parental Leave", "Bereavement Leave", "Work From Home", "Emergency Leave", "Unpaid Leave"],
+  probation_status: ["Under Probation", "Completed", "Extended"],
+  leave_settlement: ["No", "Yes"],
   approval_status: ["Pending", "Approved", "Rejected"],
   visibility_scope: ["Own Record Only", "Juniors Only", "Department", "All Records", "Custom Selected Employees"]
 };
@@ -335,7 +337,8 @@ async function submitLeaveRequest(row) {
     p_accrued_to_date: row.accrued_to_date ?? null,
     p_used: row.used ?? null,
     p_remaining: row.remaining ?? null,
-    p_remarks: row.remarks || null
+    p_remarks: row.remarks || null,
+    p_leave_settlement: row.leave_settlement || "No"
   });
   if (error) throw error;
   return data;
@@ -696,8 +699,32 @@ function currentLeaveEmployee() {
   return currentUserEmployee();
 }
 
+function joiningChecklistForEmployee(employeeValue) {
+  const targetEmployee = employeeForLeave(employeeValue) || employeeValue;
+  const target = normalizePerson(employeeDisplay(targetEmployee) || employeeValue);
+  const targetName = normalizePerson(targetEmployee?.name || employeeValue);
+  const targetId = normalizePerson(targetEmployee?.employee_id || "");
+  return (state.rows.joining_checklist || []).find((row) => {
+    const rowEmployee = normalizePerson(row.employee);
+    return rowEmployee === target || rowEmployee === targetName || (targetId && rowEmployee.includes(targetId)) || target.includes(rowEmployee) || rowEmployee.includes(targetName);
+  }) || null;
+}
+
+function probationInfoForEmployee(employeeValue) {
+  const record = joiningChecklistForEmployee(employeeValue);
+  const status = String(record?.probation_status || "Under Probation");
+  const completionDate = parseAppDate(record?.probation_completion_date);
+  const completed = status.toLowerCase() === "completed" && completionDate && completionDate <= parseAppDate(todayIso());
+  return { record, status, completionDate, completed };
+}
+
+function annualLeaveEligibleForEmployee(employeeValue) {
+  return probationInfoForEmployee(employeeValue).completed;
+}
 
 function leaveEntitlementForEmployee(employee) {
+  if (!employee) return "Not Set";
+  if (!annualLeaveEligibleForEmployee(employeeDisplay(employee))) return "Under Probation";
   const join = parseAppDate(employee?.joining_date);
   if (!join) return "Not Set";
   const firstAnniversary = new Date(join);
@@ -722,8 +749,8 @@ function upcomingLeaveStatus(employee, rows = state.rows.leave_management || [])
 function leavePolicyPanel() {
   return `
     <div class="page-tools leave-policy-note">
-      <span class="viewer-notice">Annual leave accrues at 2 days per month from joining date until completion of 1 year.</span>
-      <span class="viewer-notice">After 1 year completion, annual leave accrues at 2.5 days per month; balance is calculated up to ${todayIso()} and deducted only after superuser approval.</span>
+      <span class="viewer-notice">Annual leave is calculated from joining date, but eligibility starts only after probation is completed in Joining Checklist.</span>
+      <span class="viewer-notice">First year accrues at 2 days/month; after 1 year it accrues at 2.5 days/month. Approved Annual Leave only deducts the balance.</span>
     </div>
   `;
 }
@@ -738,9 +765,10 @@ const summaryEmployee = currentLeaveEmployee();
   const summaryBalance = leaveBalanceForEmployee(employeeDisplay(summaryEmployee));
   const accruedDays = Math.round(Number(summaryBalance.accrued || 0));
   const remainingDays = Math.round(Number(summaryBalance.remaining || 0));
-  const balanceText = summaryBalance.used > 0 ? `${remainingDays} / ${accruedDays} Days` : `${accruedDays} Days`;
+  const probationInfo = probationInfoForEmployee(employeeDisplay(summaryEmployee));
+  const balanceText = probationInfo.completed ? (summaryBalance.used > 0 ? `${remainingDays} / ${accruedDays} Days` : `${accruedDays} Days`) : "Under Probation";
   $("#summaryCards").innerHTML = `
-    ${metric("Leave Category", leaveEntitlementForEmployee(summaryEmployee))}
+    ${metric("Leave Eligibility", probationInfo.completed ? "Eligible" : "Under Probation")}
     ${metric("Accrued as of today", balanceText)}
     ${metric("Upcoming Leave", upcomingLeaveStatus(summaryEmployee, state.rows.leave_management || []))}
   `;
@@ -752,7 +780,7 @@ const summaryEmployee = currentLeaveEmployee();
     table.innerHTML = `<tbody><tr><td class="empty-state">No leave requests found.</td></tr></tbody>`;
   } else {
     table.innerHTML = `
-      <thead><tr><th>Sr. No</th><th>Employee</th><th>Leave Category</th><th>Start Date</th><th>End Date</th><th>Requested Days</th><th>Accrued Annual</th><th>Used Annual</th><th>Remaining Annual</th><th>Status</th><th>Remarks</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Sr. No</th><th>Employee</th><th>Leave Category</th><th>Start Date</th><th>End Date</th><th>Requested Days</th><th>Accrued Annual</th><th>Used Annual</th><th>Remaining Annual</th><th>Status</th><th>Leave Settlement</th><th>Remarks</th><th>Actions</th></tr></thead>
       <tbody>
         ${rows.map((row, index) => {
           const requestedDays = Number(row.requested_days || daysBetweenInclusive(row.start_date, row.end_date));
@@ -774,6 +802,7 @@ const summaryEmployee = currentLeaveEmployee();
               <td><span class="readonly-cell">${used}</span></td>
               <td><span class="readonly-cell highlighted-balance">${remaining}</span></td>
               <td><span class="view-only-pill">${escapeHtml(status)}</span></td>
+              <td><span class="view-only-pill">${escapeHtml(row.leave_settlement || "No")}</span></td>
               <td><span class="readonly-cell wide-text">${escapeHtml(row.remarks || "-")}</span></td>
               <td class="row-actions">
                 ${canApproveLeaveRow(row) && status !== "Approved" ? `<button type="button" class="save-button" data-approve-leave="${row.id}">Approve</button>` : ""}
@@ -805,6 +834,7 @@ function renderLeaveForm() {
     <label>Start Date<input data-field="start_date" type="date" required></label>
     <label>End Date<input data-field="end_date" type="date" required></label>
     <label>Requested Days<input data-field="requested_days" type="number" min="0" step="0.5" placeholder="Auto if blank"></label>
+    <label>Leave Settlement<select data-field="leave_settlement"><option>No</option><option>Yes</option></select></label>
     <label>Remarks<input data-field="remarks" type="text" placeholder="Reason / notes"></label>
     <button type="submit">Submit Leave Request</button>
   `;
@@ -1401,7 +1431,7 @@ async function showPage(key) {
     await renderHierarchyPage();
   } else {
     if (page.table === "leave_management") {
-      await loadTables(["leave_management", "employees"], { optional: true });
+      await loadTables(["leave_management", "employees", "joining_checklist"], { optional: true });
     } else {
       await ensurePageData(page);
     }
@@ -1691,6 +1721,9 @@ $("#recordForm").addEventListener("submit", async (event) => {
     }
     const balance = leaveBalanceForEmployee(row.employee);
     const isAnnual = String(row.leave_type || "").toLowerCase() === "annual leave";
+    if (isAnnual && !annualLeaveEligibleForEmployee(row.employee)) {
+      throw new Error("Annual Leave is available only after probation is completed in Joining Checklist.");
+    }
     row.accrued_to_date = isAnnual ? Math.round(balance.accrued) : null;
     row.used = isAnnual ? Math.round(balance.used || 0) : null;
     row.remaining = isAnnual ? Math.round(balance.remaining || 0) : null;
