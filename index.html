@@ -2409,7 +2409,7 @@ document.addEventListener("change", async (event) => {
   function printPcDocument() {
     if (!window.__pcDocumentationDraft) renderPcDocumentPreview();
     const preview = $("#pcDocPreview")?.innerHTML || "";
-    const printWindow = window.open("", "_blank", "noopener,width=900,height=1000");
+    const printWindow = window.open("", "_blank", "width=900,height=1000");
     if (!printWindow) { alert("Please allow pop-ups to print or save PDF."); return; }
     printWindow.document.write(`<!doctype html><html><head><title>P&C Documentation</title><style>body{margin:0;padding:28px;background:#fff;color:#202124}.pc-letter-paper{font-family:Georgia,'Times New Roman',serif;line-height:1.72;padding:22px}.pc-letter-head{display:flex;align-items:center;gap:16px;border-bottom:2px solid #9c8342;padding-bottom:16px;margin-bottom:28px}.pc-letter-logo{width:58px;height:74px;border-radius:20px;display:grid;place-items:center;color:white;font:800 18px Arial;background:linear-gradient(145deg,#2e2e2d,#a58b45)}.pc-letter-title strong{display:block;font:800 28px Arial;color:#2a2b2d}.pc-letter-title span{display:block;font:700 15px Arial;color:#9c8342}.pc-letter-meta{display:flex;justify-content:space-between;font:600 13px Arial;color:#575044;margin-bottom:26px}.pc-letter-subject{text-align:center;font-weight:800;text-decoration:underline;margin:22px 0}.pc-letter-sign{margin-top:52px;font-family:Arial;font-weight:700}</style></head><body>${preview}</body></html>`);
     printWindow.document.close();
@@ -2437,7 +2437,7 @@ document.addEventListener("change", async (event) => {
   }
 
   async function savePcDocumentRecord() {
-    if (!window.__pcDocumentationDraft) renderPcDocumentPreview();
+    renderPcDocumentPreview();
     const draft = window.__pcDocumentationDraft;
     const payload = {
       document_no: draft.documentNo,
