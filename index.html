@@ -891,6 +891,8 @@ const summaryEmployee = currentLeaveEmployee();
 
 function renderLeaveForm() {
   const panel = $("#addRecordPanel");
+  const summary = panel.querySelector("summary");
+  if (summary) summary.textContent = "Leave Application";
   panel.open = false;
   if (!canRequestLeave()) {
     $("#recordForm").innerHTML = "";
@@ -1443,13 +1445,16 @@ function fieldControl(column, value, editable = canEdit()) {
 
 function renderForm(page) {
   const cols = columns[page.table] || [];
-  $("#addRecordPanel").open = false;
+  const panel = $("#addRecordPanel");
+  const summary = panel.querySelector("summary");
+  if (summary) summary.textContent = "Add new record";
+  panel.open = false;
   if (page.table === "recruitment") {
-    $("#addRecordPanel").hidden = false;
+    panel.hidden = false;
   }
   if (!canEditTable(page.table)) {
     $("#recordForm").innerHTML = "";
-    $("#addRecordPanel").hidden = true;
+    panel.hidden = true;
     return;
   }
   const templateButton = page.table === "recruitment"
