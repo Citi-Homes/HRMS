@@ -157,7 +157,6 @@ const pages = [
   { key: "leave_management", label: "Leave Management", table: "leave_management" },
   { key: "documents", label: "Visa & Documents", table: "documents" },
   { key: "tasks", label: "P&C Task Calendar", table: "tasks" },
-  { key: "hierarchy", label: "Hierarchy" },
   { key: "access_control", label: "Access Control" }
 ];
 const columns = {
@@ -171,8 +170,7 @@ const columns = {
   utilities: ["utility", "vendor", "invoice_date", "due_date", "amount", "status", "reminder_sent"],
   inventory: ["item", "category", "quantity", "location", "responsible_person", "condition"],
   vendors: ["vendor", "service", "contact_person", "mobile", "contract_status", "renewal_date"],
-  tasks: ["task", "frequency", "due_date", "status", "remarks"],
-  employee_hierarchy: ["manager_name", "manager_email", "visibility_scope", "employee_name", "employee_id", "employee_email", "department", "is_active", "notes"]
+  tasks: ["task", "frequency", "due_date", "status", "remarks"]
 };
 
 const options = {
@@ -299,7 +297,7 @@ function canRequestLeave() {
 }
 
 function canViewPage(page) {
-  if (page.key === "access_control" || page.key === "hierarchy") return isSuperUser();
+  if (page.key === "access_control") return isSuperUser();
   if (page.key === "attendance") return canViewAttendancePortal();
   if (page.table) return canViewTable(page.table);
   return true;
@@ -524,7 +522,7 @@ function renderDashboard() {
     </div>
     <div class="glass empty-state">
       <h3>Citi Homes P&C</h3>
-      <p>Manage employees, recruitment, interviews, onboarding, attendance, leave, visa documents, hierarchy and P&C tasks from one clean dashboard.</p>
+      <p>Manage employees, recruitment, interviews, onboarding, attendance, leave, visa documents and P&C tasks from one clean dashboard.</p>
     </div>
   `;
 }
@@ -1215,106 +1213,6 @@ function employeeOptionMarkup() {
 }
 
 
-function hierarchyRowMarkup(row) {
-  return `
-    <tr data-hierarchy-id="${row.id || ""}">
-      <td><span class="readonly-cell wide-text">${escapeHtml(row.manager_name || "-")}</span></td>
-      <td><span class="readonly-cell wide-text">${escapeHtml(row.manager_email || "-")}</span></td>
-      <td><span class="view-only-pill">${escapeHtml(row.visibility_scope || "Juniors Only")}</span></td>
-      <td><span class="readonly-cell wide-text">${escapeHtml(row.employee_name || "-")}</span></td>
-      <td><span class="readonly-cell">${escapeHtml(row.employee_id || "-")}</span></td>
-      <td><span class="readonly-cell wide-text">${escapeHtml(row.department || "-")}</span></td>
-      <td><span class="readonly-cell wide-text">${escapeHtml(row.notes || "-")}</span></td>
-      <td><button type="button" class="danger" data-delete-hierarchy="${row.id}">Delete</button></td>
-    </tr>`;
-}
-
-
-async function renderHierarchyPage() {
-  if (!isSuperUser()) {
-    await showPage("dashboard");
-    return;
-  }
-  await loadTables(["employees"], { optional: true });
-  await loadHierarchyData({ force: true });
-  const profiles = await fetchAccessProfiles();
-  const activeRules = activeHierarchyRows();
-  $("#dashboard").hidden = true;
-  $("#tablePage").hidden = false;
-  $("#pageTitle").textContent = "Hierarchy";
-  setTopActions();
-  $("#summaryCards").innerHTML = `
-    ${metric("Hierarchy Rules", activeRules.length)}
-    ${metric("Managers", new Set(activeRules.map((row) => String(row.manager_email || row.manager_name || "").toLowerCase()).filter(Boolean)).size)}
-    ${metric("Assigned Employees", new Set(activeRules.map((row) => String(row.employee_id || row.employee_name || "").toLowerCase()).filter(Boolean)).size)}
-  `;
-  $("#pageTools").innerHTML = `<span class="viewer-notice">Superuser-only: this controls which people each user can see inside employee and leave records.</span>`;
-  const table = $("#dataTable");
-  table.className = "compact-table hierarchy-table";
-  table.innerHTML = activeRules.length ? `
-    <thead><tr><th>Manager</th><th>Manager Email</th><th>Scope</th><th>Assigned Employee</th><th>Employee ID</th><th>Department</th><th>Notes</th><th>Action</th></tr></thead>
-    <tbody>${activeRules.map(hierarchyRowMarkup).join("")}</tbody>
-  ` : `<tbody><tr><td class="empty-state">No hierarchy rules added yet.</td></tr></tbody>`;
-  const managerOptions = profiles.map((profile) => `<option value="${escapeHtml(profile.email || "")}" data-name="${escapeHtml(profile.team_member_name || displayNameForEmail(profile.email))}" data-id="${escapeHtml(profile.team_member_id || "")}">${escapeHtml(profile.team_member_name || profile.email)} - ${escapeHtml(profile.email || "")}</option>`).join("");
-  const panel = $("#addRecordPanel");
-  panel.hidden = false;
-  panel.open = true;
-  $("#recordForm").innerHTML = `
-    <label>Manager / Senior<select data-hierarchy-field="manager_email" required>${managerOptions}</select></label>
-    <label>Visibility Scope<select data-hierarchy-field="visibility_scope">${options.visibility_scope.map((item) => `<option>${item}</option>`).join("")}</select></label>
-    <label>Assigned Employee<select data-hierarchy-field="employee_ref">${employeeOptionMarkup()}</select></label>
-    <label>Notes<input data-hierarchy-field="notes" type="text" placeholder="Optional note"></label>
-    <button type="submit">Add Hierarchy Rule</button>
-  `;
-}
-
-
-function hierarchyFormPayload(form) {
-  const managerSelect = form.querySelector('[data-hierarchy-field="manager_email"]');
-  const employeeSelect = form.querySelector('[data-hierarchy-field="employee_ref"]');
-  const selectedManager = managerSelect?.selectedOptions?.[0];
-  const selectedEmployee = employeeSelect?.selectedOptions?.[0];
-  let employeePayload = {};
-  try { employeePayload = JSON.parse(selectedEmployee?.dataset.payload || "{}"); } catch { employeePayload = {}; }
-  return {
-    manager_email: String(managerSelect?.value || "").toLowerCase(),
-    manager_name: selectedManager?.dataset.name || "",
-    manager_employee_id: selectedManager?.dataset.id || "",
-    visibility_scope: form.querySelector('[data-hierarchy-field="visibility_scope"]')?.value || "Juniors Only",
-    employee_id: employeePayload.employee_id || "",
-    employee_name: employeePayload.employee_name || selectedEmployee?.value || "",
-    employee_email: employeePayload.employee_email || "",
-    department: employeePayload.department || "",
-    notes: form.querySelector('[data-hierarchy-field="notes"]')?.value.trim() || "",
-    is_active: true
-  };
-}
-
-
-async function createHierarchyRule(form) {
-  if (!isSuperUser()) throw new Error("Only the superuser can manage hierarchy.");
-  const payload = hierarchyFormPayload(form);
-  if (!payload.manager_email) throw new Error("Please select a manager/senior.");
-  if (!payload.employee_name && !["All Records", "Department", "Own Record Only"].includes(payload.visibility_scope)) {
-    throw new Error("Please select an assigned employee for this scope.");
-  }
-  const { error } = await client.from("employee_hierarchy").insert(payload);
-  if (error) throw error;
-  form.reset();
-  state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
-  await renderHierarchyPage();
-}
-
-
-async function deleteHierarchyRule(id) {
-  if (!isSuperUser()) throw new Error("Only the superuser can manage hierarchy.");
-  const { error } = await client.from("employee_hierarchy").delete().eq("id", id);
-  if (error) throw error;
-  state.rows.employee_hierarchy = await fetchRows("employee_hierarchy");
-  await renderHierarchyPage();
-}
-
-
 function renderTablePage(page) {
   $("#dashboard").hidden = true;
   $("#tablePage").hidden = false;
@@ -1508,8 +1406,6 @@ async function showPage(key) {
     renderDashboard();
   } else if (page.key === "access_control") {
     await renderAccessControlPage();
-  } else if (page.key === "hierarchy") {
-    await renderHierarchyPage();
   } else {
     if (page.table === "leave_management") {
       await loadTables(["leave_management", "employees", "joining_checklist"], { optional: true });
@@ -1660,10 +1556,6 @@ document.addEventListener("click", async (event) => {
     }
     if (approveLeaveButton) await updateLeaveApproval(approveLeaveButton.dataset.approveLeave, "Approved");
     if (rejectLeaveButton) await updateLeaveApproval(rejectLeaveButton.dataset.rejectLeave, "Rejected");
-    if (event.target.closest("[data-delete-hierarchy]") && confirm("Delete this hierarchy rule?")) {
-      await deleteHierarchyRule(event.target.closest("[data-delete-hierarchy]").dataset.deleteHierarchy);
-      return;
-    }
     if (deleteLeaveButton && isSuperUser() && confirm("Delete this leave request?")) {
       await deleteRow("leave_management", deleteLeaveButton.dataset.deleteLeave);
       state.rows.leave_management = await fetchRows("leave_management");
@@ -1772,14 +1664,6 @@ $("#recordForm").addEventListener("submit", async (event) => {
       } else {
         alert(error?.message || error);
       }
-    }
-    return;
-  }
-  if (page.key === "hierarchy") {
-    try {
-      await createHierarchyRule(event.currentTarget);
-    } catch (error) {
-      alert(error.message || error);
     }
     return;
   }
