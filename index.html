@@ -2028,5 +2028,208 @@ document.addEventListener("change", async (event) => {
   }, true);
 })();
 </script>
+<script>
+(function () {
+  if (window.__citiHomesAttendanceHubPatch) return;
+  window.__citiHomesAttendanceHubPatch = true;
+  const ATTENDANCE_PORTAL_EMBED_URL = "https://citi-homes.github.io/Attendance.Portal/admin.html";
+  const ATTENDANCE_PORTAL_FALLBACK_URL = "https://citi-homes.github.io/Attendance.Portal/index.html";
+  const ATTENDANCE_SUPABASE_URL = "https://mnfrbyzdubsgnhxrzuxx.supabase.co";
+  const ATTENDANCE_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1uZnJieXpkdWJzZ25oeHJ6dXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyODUxMjQsImV4cCI6MjA5Nzg2MTEyNH0.XCVsDFy6-DDBEh847kH2AxfsCaxiFVFK-JZnxo6xPSI";
+  function installAttendanceHubStyles() {
+    if (document.getElementById("attendanceHubStyles")) return;
+    const style = document.createElement("style");
+    style.id = "attendanceHubStyles";
+    style.textContent = `
+      .attendance-hub-grid { display: grid; grid-template-columns: minmax(360px, 1.1fr) minmax(420px, .9fr); gap: 18px; width: 100%; align-items: stretch; }
+      .attendance-panel { padding: 18px; border: 1px solid rgba(255,255,255,.72); border-radius: 20px; background: linear-gradient(135deg, rgba(255,255,255,.46), rgba(255,255,255,.18)); box-shadow: 0 18px 45px rgba(31,27,20,.12), inset 0 1px 0 rgba(255,255,255,.82); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); }
+      .attendance-panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:14px; }
+      .attendance-panel-title { margin:0; font-size:18px; font-weight:800; color:#252525; }
+      .attendance-panel-note { margin:5px 0 0; color:#6f6a61; font-size:13px; line-height:1.35; }
+      .attendance-portal-frame { width:100%; min-height:520px; border:1px solid rgba(255,255,255,.72); border-radius:18px; background:rgba(255,255,255,.42); box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); }
+      .attendance-controls { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:14px; }
+      .attendance-controls label { display:grid; gap:6px; color:#6f6a61; font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+      .attendance-controls input, .attendance-controls select { min-height:42px; border-radius:14px; border:1px solid rgba(87,80,65,.18); background:rgba(255,255,255,.72); padding:0 13px; font:inherit; color:#252525; outline:none; }
+      .attendance-action-row { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0 2px; }
+      .attendance-action-row .pill { min-width:160px; justify-content:center; }
+      .attendance-status-line { min-height:22px; color:#6a7b58; font-weight:800; font-size:13px; margin-top:10px; }
+      #dataTable.attendance-timesheet-table { table-layout:auto; min-width:980px; }
+      #dataTable.attendance-timesheet-table th, #dataTable.attendance-timesheet-table td { white-space:nowrap; padding:12px 14px; }
+      #dataTable.attendance-timesheet-table td:nth-child(2), #dataTable.attendance-timesheet-table th:nth-child(2) { min-width:220px; }
+      @media (max-width: 1100px) { .attendance-hub-grid { grid-template-columns:1fr; } .attendance-portal-frame { min-height:440px; } }
+    `;
+    document.head.appendChild(style);
+  }
+  function configureAttendancePage() {
+    const list = Array.isArray(window.pages) ? window.pages : (typeof pages !== "undefined" ? pages : []);
+    const attendancePage = list.find((page) => page.key === "attendance");
+    if (attendancePage) {
+      delete attendancePage.external;
+      attendancePage.table = "attendance_portal";
+      attendancePage.label = "Attendance Portal";
+    }
+  }
+  function monthBounds(monthValue) {
+    const value = monthValue || new Date().toISOString().slice(0, 7);
+    const start = new Date(value + "-01T00:00:00");
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
+    return { value, start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  }
+  function normalizeAttendanceDate(row) {
+    const direct = String(row.record_date || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(direct)) return direct.slice(0, 10);
+    const raw = String(row.punch_in || row.punch_out || "").split("·")[0].trim();
+    if (!raw) return "";
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return parsed.toISOString().slice(0, 10);
+  }
+  function timeMinutes(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const timePart = raw.includes("·") ? raw.split("·").pop().trim() : raw;
+    const match = timePart.match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
+    if (match) return Number(match[1]) * 60 + Number(match[2]);
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getHours() * 60 + parsed.getMinutes();
+    return null;
+  }
+  function minutesWorked(row) {
+    const start = timeMinutes(row.punch_in);
+    const end = timeMinutes(row.punch_out);
+    if (start === null || end === null) return 0;
+    let minutes = end - start;
+    if (minutes < 0) minutes += 24 * 60;
+    return Math.max(0, minutes);
+  }
+  function hours(minutes) { return (minutes / 60).toFixed(2); }
+  function csvEscape(value) {
+    const text = String(value ?? "");
+    return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  }
+  async function fetchAttendanceRows(monthValue) {
+    const bounds = monthBounds(monthValue);
+    const headers = { apikey: ATTENDANCE_SUPABASE_KEY, Authorization: "Bearer " + ATTENDANCE_SUPABASE_KEY };
+    const filteredUrl = `${ATTENDANCE_SUPABASE_URL}/rest/v1/attendance_records?select=*&record_date=gte.${bounds.start}&record_date=lt.${bounds.end}&order=id.asc`;
+    let response = await fetch(filteredUrl, { headers });
+    if (response.ok) return await response.json();
+    const fallbackUrl = `${ATTENDANCE_SUPABASE_URL}/rest/v1/attendance_records?select=*&order=id.asc&limit=5000`;
+    response = await fetch(fallbackUrl, { headers });
+    if (!response.ok) throw new Error(await response.text());
+    const rows = await response.json();
+    return rows.filter((row) => { const d = normalizeAttendanceDate(row); return d >= bounds.start && d < bounds.end; });
+  }
+  function summarizeAttendanceRows(rows) {
+    const groups = new Map();
+    rows.forEach((row) => {
+      const key = String(row.emp_code || row.emp_name || "Unknown").trim() || "Unknown";
+      if (!groups.has(key)) groups.set(key, { emp_code: row.emp_code || "", emp_name: row.emp_name || "Unknown", department: row.department || "", days: new Set(), total: 0, regular: 0, overtime: 0, missing: 0, records: 0 });
+      const group = groups.get(key);
+      const workDate = normalizeAttendanceDate(row);
+      if (workDate) group.days.add(workDate);
+      const minutes = minutesWorked(row);
+      group.records += 1;
+      group.total += minutes;
+      group.regular += Math.min(480, minutes);
+      group.overtime += Math.max(0, minutes - 480);
+      if (row.punch_in && !row.punch_out) group.missing += 1;
+    });
+    return Array.from(groups.values()).sort((a, b) => String(a.emp_name).localeCompare(String(b.emp_name)));
+  }
+  function renderEmployeeOptions(rows, selected) {
+    const map = new Map();
+    rows.forEach((row) => {
+      const key = String(row.emp_code || row.emp_name || "").trim();
+      if (!key) return;
+      map.set(key, `${row.emp_name || key}${row.emp_code ? " (" + row.emp_code + ")" : ""}`);
+    });
+    return `<option value="">All employees</option>` + Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  }
+  function renderTimesheetTable(summaryRows, monthValue) {
+    window.__attendancePayrollRows = summaryRows;
+    const table = $("#dataTable");
+    table.className = "attendance-timesheet-table";
+    if (!summaryRows.length) {
+      table.innerHTML = `<tbody><tr><td class="empty-row">No attendance records found for selected month.</td></tr></tbody>`;
+      return;
+    }
+    table.innerHTML = `<thead><tr><th>Emp Code</th><th>Employee</th><th>Department</th><th>Month</th><th>Working Days</th><th>Total Hours</th><th>Regular Hours</th><th>Overtime</th><th>Missing Checkout</th><th>Records</th></tr></thead><tbody>${summaryRows.map((row) => `<tr><td>${escapeHtml(row.emp_code || "-")}</td><td>${escapeHtml(row.emp_name || "-")}</td><td>${escapeHtml(row.department || "-")}</td><td>${escapeHtml(monthValue)}</td><td>${row.days.size}</td><td>${hours(row.total)}</td><td>${hours(row.regular)}</td><td>${hours(row.overtime)}</td><td>${row.missing}</td><td>${row.records}</td></tr>`).join("")}</tbody>`;
+  }
+  async function loadAttendanceTimesheet() {
+    const monthInput = $("#attendancePayrollMonth");
+    const employeeSelect = $("#attendancePayrollEmployee");
+    const status = $("#attendancePayrollStatus");
+    const monthValue = monthInput?.value || new Date().toISOString().slice(0, 7);
+    if (status) status.textContent = "Loading attendance records...";
+    try {
+      const allRows = await fetchAttendanceRows(monthValue);
+      const selectedEmployee = employeeSelect?.value || "";
+      if (employeeSelect) employeeSelect.innerHTML = renderEmployeeOptions(allRows, selectedEmployee);
+      const filtered = selectedEmployee ? allRows.filter((row) => String(row.emp_code || row.emp_name || "").trim() === selectedEmployee) : allRows;
+      const summaryRows = summarizeAttendanceRows(filtered);
+      const totalMinutes = summaryRows.reduce((sum, row) => sum + row.total, 0);
+      const workDays = summaryRows.reduce((sum, row) => sum + row.days.size, 0);
+      $("#summaryCards").innerHTML = `${metric("Month Records", allRows.length)}${metric("Payroll Employees", summaryRows.length)}${metric("Working Days", workDays)}${metric("Total Hours", hours(totalMinutes))}`;
+      renderTimesheetTable(summaryRows, monthValue);
+      if (status) status.textContent = `Loaded ${allRows.length} attendance records for ${monthValue}.`;
+    } catch (error) {
+      renderTimesheetTable([], monthValue);
+      if (status) status.textContent = "Could not load attendance records. Please check Supabase access or try again.";
+      console.error("Attendance payroll load failed", error);
+    }
+  }
+  function exportAttendancePayrollCsv() {
+    const rows = window.__attendancePayrollRows || [];
+    const monthValue = $("#attendancePayrollMonth")?.value || new Date().toISOString().slice(0, 7);
+    if (!rows.length) { alert("No payroll timesheet data available to export."); return; }
+    const header = ["Emp Code", "Employee", "Department", "Month", "Working Days", "Total Hours", "Regular Hours", "Overtime Hours", "Missing Checkout", "Records"];
+    const lines = [header.join(",")].concat(rows.map((row) => [row.emp_code || "", row.emp_name || "", row.department || "", monthValue, row.days.size, hours(row.total), hours(row.regular), hours(row.overtime), row.missing, row.records].map(csvEscape).join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `CitiHomes_Payroll_Timesheet_${monthValue}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+  function renderAttendanceHubPage(page) {
+    installAttendanceHubStyles();
+    $("#dashboard").hidden = true;
+    $("#tablePage").hidden = false;
+    $("#pageTitle").textContent = page.label || "Attendance Portal";
+    setTopActions();
+    const tableWrap = $("#dataTable").closest(".table-wrap");
+    if (tableWrap) tableWrap.hidden = false;
+    const leaveFooter = $("#leavePolicyFooter");
+    if (leaveFooter) leaveFooter.innerHTML = "";
+    const addPanel = $("#addRecordPanel");
+    if (addPanel) addPanel.hidden = true;
+    const form = $("#recordForm");
+    if (form) form.innerHTML = "";
+    $("#summaryCards").className = "summary-grid";
+    $("#summaryCards").innerHTML = `${metric("Attendance Portal", "Embedded")}${metric("Monthly Timesheet", "Payroll")}${metric("Data Source", "Supabase")}`;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    $("#pageTools").innerHTML = `<div class="attendance-hub-grid"><section class="attendance-panel"><div class="attendance-panel-head"><div><h3 class="attendance-panel-title">Live Attendance Portal</h3><p class="attendance-panel-note">Use the existing attendance dashboard here without leaving HRMS.</p></div><a class="pill" target="_blank" rel="noopener" href="${ATTENDANCE_PORTAL_FALLBACK_URL}">Open Full Portal</a></div><iframe class="attendance-portal-frame" title="Citi Homes Attendance Portal" src="${ATTENDANCE_PORTAL_EMBED_URL}"></iframe></section><section class="attendance-panel"><div class="attendance-panel-head"><div><h3 class="attendance-panel-title">Monthly Timesheet for Payroll</h3><p class="attendance-panel-note">Select month and employee, then export payroll-ready attendance totals as CSV.</p></div></div><div class="attendance-controls"><label>Payroll Month<input id="attendancePayrollMonth" type="month" value="${currentMonth}"></label><label>Employee<select id="attendancePayrollEmployee"><option value="">All employees</option></select></label></div><div class="attendance-action-row"><button type="button" class="pill import-button" data-attendance-load>Load Timesheet</button><button type="button" class="pill" data-attendance-export>Export Payroll CSV</button></div><div id="attendancePayrollStatus" class="attendance-status-line">Ready.</div></section></div>`;
+    renderTimesheetTable([], currentMonth);
+    loadAttendanceTimesheet();
+  }
+  const originalRenderTablePage = window.renderTablePage || renderTablePage;
+  window.renderTablePage = renderTablePage = function (page) {
+    if (page && page.key === "attendance") { renderAttendanceHubPage(page); return; }
+    return originalRenderTablePage(page);
+  };
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-attendance-load]")) loadAttendanceTimesheet();
+    if (event.target.closest("[data-attendance-export]")) exportAttendancePayrollCsv();
+  });
+  document.addEventListener("change", (event) => {
+    if (event.target && (event.target.id === "attendancePayrollMonth" || event.target.id === "attendancePayrollEmployee")) loadAttendanceTimesheet();
+  });
+  configureAttendancePage();
+})();
+</script>
 </body>
 </html>
