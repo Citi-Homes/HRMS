@@ -2231,5 +2231,317 @@ document.addEventListener("change", async (event) => {
   configureAttendancePage();
 })();
 </script>
+<script>
+(function () {
+  if (window.__citiHomesPcDocumentationPatch) return;
+  window.__citiHomesPcDocumentationPatch = true;
+
+  const PC_DOC_TYPES = [
+    "Salary Certificate",
+    "Salary Transfer Letter",
+    "Employment Certificate",
+    "NOC",
+    "Experience Letter",
+    "Warning Letter",
+    "Increment Letter",
+    "Promotion Letter",
+    "Confirmation Letter",
+    "Termination"
+  ];
+
+  function installPcDocumentationStyles() {
+    if (document.getElementById("pcDocumentationStyles")) return;
+    const style = document.createElement("style");
+    style.id = "pcDocumentationStyles";
+    style.textContent = `
+      .pc-doc-grid { display:grid; grid-template-columns:minmax(360px,.72fr) minmax(520px,1fr); gap:18px; align-items:start; width:100%; }
+      .pc-doc-card { border:1px solid rgba(255,255,255,.76); border-radius:20px; background:linear-gradient(135deg, rgba(255,255,255,.54), rgba(255,255,255,.2)); box-shadow:0 18px 44px rgba(32,27,18,.13), inset 0 1px 0 rgba(255,255,255,.8); backdrop-filter:blur(18px) saturate(150%); -webkit-backdrop-filter:blur(18px) saturate(150%); padding:18px; }
+      .pc-doc-card h3 { margin:0 0 14px; font-size:20px; color:#242528; }
+      .pc-doc-form { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+      .pc-doc-form label { display:grid; gap:7px; color:#6f6a61; font-size:12px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; }
+      .pc-doc-form input, .pc-doc-form select, .pc-doc-form textarea { width:100%; min-height:42px; border:1px solid rgba(86,78,62,.18); border-radius:14px; background:rgba(255,255,255,.72); color:#252525; font:inherit; padding:10px 12px; outline:none; }
+      .pc-doc-form textarea { min-height:84px; resize:vertical; }
+      .pc-doc-full { grid-column:1 / -1; }
+      .pc-doc-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+      .pc-doc-actions .pill { min-width:150px; justify-content:center; }
+      .pc-doc-status { min-height:22px; margin-top:12px; color:#6b7d59; font-weight:800; }
+      .pc-letter-paper { min-height:690px; background:rgba(255,255,255,.88); color:#202124; border:1px solid rgba(151,134,92,.28); border-radius:16px; padding:34px 42px; box-shadow:0 24px 60px rgba(36,30,18,.14); font-family:Georgia, 'Times New Roman', serif; line-height:1.72; }
+      .pc-letter-head { display:flex; align-items:center; gap:16px; border-bottom:2px solid #9c8342; padding-bottom:16px; margin-bottom:28px; }
+      .pc-letter-logo { width:58px; height:74px; border-radius:20px; display:grid; place-items:center; color:white; font:800 18px Quicksand, sans-serif; background:linear-gradient(145deg,#2e2e2d,#a58b45); }
+      .pc-letter-title strong { display:block; font:800 28px Quicksand, sans-serif; color:#2a2b2d; letter-spacing:-.02em; }
+      .pc-letter-title span { display:block; font:700 15px Quicksand, sans-serif; color:#9c8342; margin-top:2px; }
+      .pc-letter-meta { display:flex; justify-content:space-between; gap:18px; font:600 13px Quicksand, sans-serif; color:#575044; margin-bottom:26px; }
+      .pc-letter-subject { text-align:center; font-weight:800; text-decoration:underline; margin:22px 0; }
+      .pc-letter-body p { margin:0 0 14px; }
+      .pc-letter-sign { margin-top:52px; font-family:Quicksand, sans-serif; font-weight:700; }
+      .pc-doc-history-table { width:100%; border-collapse:collapse; }
+      .pc-doc-history-table th, .pc-doc-history-table td { padding:12px 10px; text-align:left; border-bottom:1px solid rgba(80,72,56,.12); white-space:nowrap; }
+      .pc-doc-history-table th { color:#756f65; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+      @media (max-width:1100px) { .pc-doc-grid { grid-template-columns:1fr; } .pc-doc-form { grid-template-columns:1fr; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function pcEmployeeLabel(employee) {
+    return `${employee.employee_id || ""}${employee.employee_id ? " - " : ""}${employee.name || "Unnamed Employee"}`;
+  }
+
+  function selectedPcEmployee() {
+    const value = $("#pcDocEmployee")?.value || "";
+    return (state.rows.employees || []).find((row) => String(row.id || row.employee_id || row.name) === value) || (state.rows.employees || [])[0] || {};
+  }
+
+  function pcDocNumber(type) {
+    const prefix = String(type || "DOC").split(/\s+/).map((word) => word[0] || "").join("").toUpperCase().slice(0, 4) || "DOC";
+    return `CH-PC-${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+  }
+
+  function pcDocValue(id) {
+    return String($(id)?.value || "").trim();
+  }
+
+  function buildPcLetterContent(employee, values) {
+    const name = employee.name || "Employee Name";
+    const employeeId = employee.employee_id || "Employee ID";
+    const designation = employee.designation || "Designation";
+    const department = employee.department || "P&C";
+    const joiningDate = employee.joining_date || "Joining Date";
+    const addressedTo = values.addressedTo || "To Whom It May Concern";
+    const purpose = values.purpose || "official purpose";
+    const salary = values.salary || "";
+    const effectiveDate = values.effectiveDate || values.issueDate;
+    const bank = values.bank || "the concerned bank";
+    const remarks = values.remarks || "";
+    let subject = values.type;
+    let paragraphs = [];
+
+    if (values.type === "Salary Certificate") {
+      paragraphs = [
+        `This is to certify that ${name}, Employee ID ${employeeId}, is employed with Citi Homes as ${designation} in the ${department} department since ${joiningDate}.`,
+        `This certificate is issued upon the employee's request for ${purpose}.${salary ? ` The current monthly salary is AED ${salary}.` : ""}`,
+        `This letter is issued without any financial liability on Citi Homes.`
+      ];
+    } else if (values.type === "Salary Transfer Letter") {
+      paragraphs = [
+        `This letter confirms that ${name}, Employee ID ${employeeId}, is employed with Citi Homes as ${designation} since ${joiningDate}.`,
+        `Kindly arrange salary transfer to ${bank}.${salary ? ` The monthly salary is AED ${salary}.` : ""}`,
+        `This letter is issued at the employee's request and does not create any additional liability on Citi Homes.`
+      ];
+    } else if (values.type === "NOC") {
+      paragraphs = [
+        `This is to confirm that Citi Homes has no objection to ${name}, Employee ID ${employeeId}, proceeding with ${purpose}.`,
+        `${name} is currently working as ${designation} in the ${department} department since ${joiningDate}.`,
+        `This NOC is issued upon request and is subject to company policies and applicable law.`
+      ];
+    } else if (values.type === "Experience Letter") {
+      paragraphs = [
+        `This is to certify that ${name}, Employee ID ${employeeId}, has been employed with Citi Homes as ${designation} in the ${department} department since ${joiningDate}.`,
+        `During the tenure, the employee has performed assigned duties and responsibilities in line with company expectations.`,
+        `We wish the employee continued success in future endeavors.`
+      ];
+    } else if (values.type === "Warning Letter") {
+      paragraphs = [
+        `This letter serves as an official warning to ${name}, Employee ID ${employeeId}, regarding ${purpose}.`,
+        `You are advised to take immediate corrective action and comply with company policies and instructions.`,
+        `Further repetition may lead to disciplinary action as per company policy.`
+      ];
+    } else if (values.type === "Increment Letter") {
+      paragraphs = [
+        `We are pleased to inform ${name}, Employee ID ${employeeId}, that the salary revision is effective from ${effectiveDate}.`,
+        `${salary ? `The revised monthly salary will be AED ${salary}.` : "The revised salary details will be as per the approved company record."}`,
+        `We appreciate your contribution and look forward to your continued performance.`
+      ];
+    } else if (values.type === "Promotion Letter") {
+      paragraphs = [
+        `We are pleased to confirm the promotion of ${name}, Employee ID ${employeeId}, effective from ${effectiveDate}.`,
+        `The updated designation and related terms will be as per the approved company record.`,
+        `We congratulate you and wish you continued success in your new role.`
+      ];
+    } else if (values.type === "Confirmation Letter") {
+      paragraphs = [
+        `We are pleased to confirm that ${name}, Employee ID ${employeeId}, has successfully completed the probation period.`,
+        `Your employment is confirmed effective from ${effectiveDate}, subject to company policies and employment terms.`,
+        `We look forward to your continued contribution to Citi Homes.`
+      ];
+    } else if (values.type === "Termination") {
+      paragraphs = [
+        `This letter confirms the termination of employment of ${name}, Employee ID ${employeeId}, effective from ${effectiveDate}.`,
+        `The termination is related to ${purpose}.`,
+        `All applicable handover and clearance requirements must be completed as per company policy.`
+      ];
+    } else {
+      paragraphs = [
+        `This is to certify that ${name}, Employee ID ${employeeId}, is employed with Citi Homes as ${designation} in the ${department} department since ${joiningDate}.`,
+        `This document is issued upon request for ${purpose}.`
+      ];
+    }
+    if (remarks) paragraphs.push(remarks);
+    return { subject, paragraphs };
+  }
+
+  function renderPcDocumentPreview() {
+    const employee = selectedPcEmployee();
+    const values = {
+      type: pcDocValue("#pcDocType") || "Salary Certificate",
+      issueDate: pcDocValue("#pcDocIssueDate") || new Date().toISOString().slice(0, 10),
+      addressedTo: pcDocValue("#pcDocAddressedTo"),
+      purpose: pcDocValue("#pcDocPurpose"),
+      salary: pcDocValue("#pcDocSalary"),
+      bank: pcDocValue("#pcDocBank"),
+      effectiveDate: pcDocValue("#pcDocEffectiveDate"),
+      remarks: pcDocValue("#pcDocRemarks")
+    };
+    const documentNo = pcDocNumber(values.type);
+    const content = buildPcLetterContent(employee, values);
+    window.__pcDocumentationDraft = { employee, values, documentNo, content };
+    $("#pcDocPreview").innerHTML = `
+      <article class="pc-letter-paper">
+        <header class="pc-letter-head"><div class="pc-letter-logo">CH</div><div class="pc-letter-title"><strong>Citi Homes</strong><span>P&C Administration System</span></div></header>
+        <div class="pc-letter-meta"><span>Document No: ${escapeHtml(documentNo)}</span><span>Date: ${escapeHtml(values.issueDate)}</span></div>
+        <p><strong>${escapeHtml(values.addressedTo || "To Whom It May Concern")}</strong></p>
+        <div class="pc-letter-subject">${escapeHtml(content.subject)}</div>
+        <section class="pc-letter-body">${content.paragraphs.map((text) => `<p>${escapeHtml(text)}</p>`).join("")}</section>
+        <div class="pc-letter-sign"><p>For Citi Homes</p><br><p>Authorized Signatory</p><p>People & Culture Department</p></div>
+      </article>`;
+    $("#pcDocStatus").textContent = "Preview generated. You can print/save PDF or save issued record.";
+  }
+
+  function printPcDocument() {
+    if (!window.__pcDocumentationDraft) renderPcDocumentPreview();
+    const preview = $("#pcDocPreview")?.innerHTML || "";
+    const printWindow = window.open("", "_blank", "noopener,width=900,height=1000");
+    if (!printWindow) { alert("Please allow pop-ups to print or save PDF."); return; }
+    printWindow.document.write(`<!doctype html><html><head><title>P&C Documentation</title><style>body{margin:0;padding:28px;background:#fff;color:#202124}.pc-letter-paper{font-family:Georgia,'Times New Roman',serif;line-height:1.72;padding:22px}.pc-letter-head{display:flex;align-items:center;gap:16px;border-bottom:2px solid #9c8342;padding-bottom:16px;margin-bottom:28px}.pc-letter-logo{width:58px;height:74px;border-radius:20px;display:grid;place-items:center;color:white;font:800 18px Arial;background:linear-gradient(145deg,#2e2e2d,#a58b45)}.pc-letter-title strong{display:block;font:800 28px Arial;color:#2a2b2d}.pc-letter-title span{display:block;font:700 15px Arial;color:#9c8342}.pc-letter-meta{display:flex;justify-content:space-between;font:600 13px Arial;color:#575044;margin-bottom:26px}.pc-letter-subject{text-align:center;font-weight:800;text-decoration:underline;margin:22px 0}.pc-letter-sign{margin-top:52px;font-family:Arial;font-weight:700}</style></head><body>${preview}</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+  }
+
+  async function loadPcDocumentationHistory() {
+    if (!client) return [];
+    const { data, error } = await client.from("pc_documentation").select("*").order("id", { ascending: false }).limit(50);
+    if (error) throw error;
+    return data || [];
+  }
+
+  function renderPcHistory(rows, message) {
+    if (message) {
+      $("#pcDocHistory").innerHTML = `<div class="empty-row">${escapeHtml(message)}</div>`;
+      return;
+    }
+    if (!rows.length) {
+      $("#pcDocHistory").innerHTML = `<div class="empty-row">No issued documents found.</div>`;
+      return;
+    }
+    $("#pcDocHistory").innerHTML = `<table class="pc-doc-history-table"><thead><tr><th>Document No.</th><th>Employee</th><th>Type</th><th>Issue Date</th><th>Issued By</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.document_no || row.id || "-")}</td><td>${escapeHtml(row.employee_name || "-")}</td><td>${escapeHtml(row.document_type || "-")}</td><td>${escapeHtml(row.issue_date || "-")}</td><td>${escapeHtml(row.issued_by || row.generated_by || "-")}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  async function savePcDocumentRecord() {
+    if (!window.__pcDocumentationDraft) renderPcDocumentPreview();
+    const draft = window.__pcDocumentationDraft;
+    const payload = {
+      document_no: draft.documentNo,
+      employee_id: draft.employee.employee_id || null,
+      employee_name: draft.employee.name || null,
+      document_type: draft.values.type,
+      issue_date: draft.values.issueDate,
+      addressed_to: draft.values.addressedTo || null,
+      purpose: draft.values.purpose || null,
+      remarks: draft.values.remarks || null,
+      generated_by: normalizedEmail()
+    };
+    const status = $("#pcDocStatus");
+    status.textContent = "Saving issued record...";
+    const { error } = await client.from("pc_documentation").insert(payload);
+    if (error) throw error;
+    status.textContent = "Issued record saved.";
+    try { renderPcHistory(await loadPcDocumentationHistory()); } catch (error) { renderPcHistory([], error.message || "History could not be loaded."); }
+  }
+
+  async function renderPcDocumentationPage() {
+    installPcDocumentationStyles();
+    $("#dashboard").hidden = true;
+    $("#tablePage").hidden = false;
+    $("#pageTitle").textContent = "P&C Documentation";
+    setTopActions();
+    const tableWrap = $("#dataTable").closest(".table-wrap");
+    if (tableWrap) tableWrap.hidden = true;
+    const addPanel = $("#addRecordPanel");
+    if (addPanel) addPanel.hidden = true;
+    const footer = $("#leavePolicyFooter");
+    if (footer) footer.innerHTML = "";
+    $("#summaryCards").className = "summary-grid";
+    $("#summaryCards").innerHTML = `${metric("Document Types", PC_DOC_TYPES.length)}${metric("Access", "Superuser")}${metric("Output", "PDF / Print")}${metric("History", "Supabase")}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const employees = state.rows.employees || [];
+    $("#pageTools").innerHTML = `
+      <div class="pc-doc-grid">
+        <section class="pc-doc-card">
+          <h3>Issue Official Document</h3>
+          <div class="pc-doc-form">
+            <label>Employee<select id="pcDocEmployee">${employees.map((employee) => `<option value="${escapeHtml(String(employee.id || employee.employee_id || employee.name))}">${escapeHtml(pcEmployeeLabel(employee))}</option>`).join("")}</select></label>
+            <label>Document Type<select id="pcDocType">${PC_DOC_TYPES.map((type) => `<option>${escapeHtml(type)}</option>`).join("")}</select></label>
+            <label>Issue Date<input id="pcDocIssueDate" type="date" value="${today}"></label>
+            <label>Effective Date<input id="pcDocEffectiveDate" type="date" value="${today}"></label>
+            <label>Addressed To<input id="pcDocAddressedTo" placeholder="To Whom It May Concern"></label>
+            <label>Purpose<input id="pcDocPurpose" placeholder="Bank, visa, travel, disciplinary action, etc."></label>
+            <label>Salary Amount<input id="pcDocSalary" inputmode="decimal" placeholder="Optional"></label>
+            <label>Bank Name<input id="pcDocBank" placeholder="Optional"></label>
+            <label class="pc-doc-full">Remarks<textarea id="pcDocRemarks" maxlength="500" placeholder="Optional remarks or custom paragraph"></textarea></label>
+          </div>
+          <div class="pc-doc-actions">
+            <button type="button" class="pill import-button" data-pc-doc-preview>Preview Document</button>
+            <button type="button" class="pill" data-pc-doc-print>Print / Save PDF</button>
+            <button type="button" class="pill" data-pc-doc-save>Save Issued Record</button>
+          </div>
+          <div id="pcDocStatus" class="pc-doc-status">Ready.</div>
+        </section>
+        <section class="pc-doc-card"><h3>Document Preview</h3><div id="pcDocPreview"><div class="empty-row">Select employee and document type, then preview.</div></div></section>
+        <section class="pc-doc-card pc-doc-full"><h3>Issued Documents History</h3><div id="pcDocHistory"><div class="empty-row">Loading history...</div></div></section>
+      </div>`;
+    if (!employees.length) $("#pcDocStatus").textContent = "Employee Master is empty or could not be loaded.";
+    try { renderPcHistory(await loadPcDocumentationHistory()); } catch (error) { renderPcHistory([], "History table is not ready yet: " + (error.message || error)); }
+  }
+
+  function installPcDocumentationPage() {
+    const list = typeof pages !== "undefined" ? pages : [];
+    if (Array.isArray(list) && !list.some((page) => page.key === "pc_documentation")) {
+      const accessIndex = list.findIndex((page) => page.key === "access_control");
+      const page = { key: "pc_documentation", label: "P&C Documentation" };
+      if (accessIndex >= 0) list.splice(accessIndex, 0, page); else list.push(page);
+    }
+    const originalCanViewPage = canViewPage;
+    canViewPage = function (page) {
+      if (page && page.key === "pc_documentation") return isSuperUser();
+      return originalCanViewPage(page);
+    };
+    const originalShowPage = showPage;
+    showPage = async function (key) {
+      if (key === "pc_documentation") {
+        if (!isSuperUser()) return originalShowPage("dashboard");
+        state.page = "pc_documentation";
+        renderShell();
+        await loadTables(["employees"], { optional: true });
+        await renderPcDocumentationPage();
+        return;
+      }
+      return originalShowPage(key);
+    };
+    document.addEventListener("click", async (event) => {
+      if (event.target.closest("[data-pc-doc-preview]")) renderPcDocumentPreview();
+      if (event.target.closest("[data-pc-doc-print]")) printPcDocument();
+      if (event.target.closest("[data-pc-doc-save]")) {
+        try { await savePcDocumentRecord(); }
+        catch (error) { $("#pcDocStatus").textContent = error.message || String(error); }
+      }
+    });
+    document.addEventListener("change", (event) => {
+      if (event.target && ["pcDocEmployee", "pcDocType"].includes(event.target.id)) renderPcDocumentPreview();
+    });
+  }
+
+  installPcDocumentationPage();
+})();
+</script>
 </body>
 </html>
