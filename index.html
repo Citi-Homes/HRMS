@@ -2025,14 +2025,15 @@ document.addEventListener("change", async (event) => {
     }
     panel.hidden = false;
     var employeeValue = leaveFormEmployeeValue();
+    var superUserEmployeeOptions = visibleEmployeeOptions();
+    var employeeControl = isSuperUser()
+      ? '<label>Employee<select data-field="employee" required>' + superUserEmployeeOptions.map(function (item) { return '<option ' + (item === employeeValue ? 'selected' : '') + '>' + escapeHtml(item) + '</option>'; }).join('') + '</select></label>'
+      : '<label class="locked-field">Employee<input data-field="employee" type="text" value="' + escapeHtml(employeeValue) + '" readonly required><span class="auto-pill">Auto</span></label>';
     var balance = leaveBalanceForEmployee(employeeValue);
     var availableAnnual = Math.round(Number(balance.remaining || 0));
     $("#recordForm").classList.add("leave-application-form");
     $("#recordForm").innerHTML = `
-      <label class="locked-field">Employee
-        <input data-field="employee" type="text" value="${escapeHtml(employeeValue)}" readonly required>
-        <span class="auto-pill">Auto</span>
-      </label>
+      ${employeeControl}
       <label>Leave Type
         <select data-field="leave_type">${options.leave_type.map((item) => `<option>${escapeHtml(item)}</option>`).join("")}</select>
       </label>
@@ -2072,6 +2073,17 @@ document.addEventListener("change", async (event) => {
     var form = $("#recordForm");
     form.querySelectorAll('[data-field="start_date"], [data-field="end_date"]').forEach(function (input) {
       input.addEventListener("change", function () { recalculateRequestedDays(form, true); });
+    });
+    form.querySelector('[data-field="employee"]')?.addEventListener("change", function (event) {
+      var updatedBalance = leaveBalanceForEmployee(event.target.value);
+      var availableTile = form.querySelector('[data-balance-available]');
+      if (availableTile) {
+        var updatedAvailable = Math.round(Number(updatedBalance.remaining || 0));
+        availableTile.dataset.balanceAvailable = String(updatedAvailable);
+        var balanceValue = availableTile.querySelector('.balance-value');
+        if (balanceValue) balanceValue.textContent = updatedAvailable + ' days';
+      }
+      defaultLeaveSplit(form);
     });
     form.querySelector('[data-field="leave_type"]')?.addEventListener("change", function () { defaultLeaveSplit(form); });
     form.querySelectorAll('[data-adjustment-field="annual_days"], [data-adjustment-field="remaining_days"]').forEach(function (input) {
