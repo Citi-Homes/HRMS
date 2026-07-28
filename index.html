@@ -842,9 +842,11 @@ const summaryEmployee = currentLeaveEmployee();
   $("#pageTools").innerHTML = "";
 
   const table = $("#dataTable");
+  const tableWrap = table.closest(".table-wrap");
   table.className = "compact-table leave-table";
+  if (tableWrap) tableWrap.hidden = !rows.length;
   if (!rows.length) {
-    table.innerHTML = `<tbody><tr><td class="empty-state">No leave requests found.</td></tr></tbody>`;
+    table.innerHTML = "";
   } else {
     table.innerHTML = `
       <thead><tr><th>Sr. No</th><th>Employee</th><th>Leave Category</th><th>Start Date</th><th>End Date</th><th>Requested Days</th><th>Accrued Annual</th><th>Used Annual</th><th>Remaining Annual</th><th>Status</th><th>Leave Settlement</th><th>Remarks</th><th>Actions</th></tr></thead>
@@ -1318,6 +1320,8 @@ function renderTablePage(page) {
   setTopActions();
 
   const rows = filteredRows(page);
+  const tableWrap = $("#dataTable").closest(".table-wrap");
+  if (tableWrap) tableWrap.hidden = false;
   if (page.table === "leave_management") {
     renderLeaveManagementPage(page, rows);
     return;
