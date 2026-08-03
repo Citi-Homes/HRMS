@@ -2691,7 +2691,16 @@ document.addEventListener("change", async (event) => {
 
   function isOpenRecruitment(row) {
     var status = recruitmentStatus(row);
-    return !['joined', 'rejected', 'closed', 'cancelled'].some(function (word) { return status.includes(word); });
+    var inactiveStatuses = [
+      'hold', 'on hold', 'rejected', 'joined', 'closed', 'cancelled', 'canceled',
+      'withdrawn', 'not selected', 'blacklisted', 'archived', 'dropped', 'hired'
+    ];
+    var activeStatuses = [
+      'open', 'active', 'applied', 'new', 'screening', 'shortlisted',
+      'interview', 'interview scheduled', 'selected', 'offered', 'offer'
+    ];
+    if (inactiveStatuses.some(function (word) { return status.includes(word); })) return false;
+    return !status || activeStatuses.some(function (word) { return status.includes(word); });
   }
 
   function isInterviewThisWeek(row) {
