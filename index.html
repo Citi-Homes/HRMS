@@ -2592,5 +2592,245 @@ document.addEventListener("change", async (event) => {
   }
 })();
 </script>
+<script>
+(function () {
+  if (window.__citiHomesExecutiveDashboardPatch) return;
+  window.__citiHomesExecutiveDashboardPatch = true;
+
+  function installExecutiveDashboardStyles() {
+    if (document.getElementById('executiveDashboardStyles')) return;
+    var style = document.createElement('style');
+    style.id = 'executiveDashboardStyles';
+    style.textContent = `
+      .executive-dashboard { display:grid; gap:18px; }
+      .executive-kpi-grid { display:grid; grid-template-columns:repeat(6,minmax(135px,1fr)); gap:12px; }
+      .executive-kpi { min-height:128px; padding:16px; border:1px solid rgba(255,255,255,.78); border-radius:18px; background:linear-gradient(145deg,rgba(255,255,255,.56),rgba(255,255,255,.22)); box-shadow:0 18px 42px rgba(32,27,18,.12), inset 0 1px 0 rgba(255,255,255,.82); backdrop-filter:blur(18px) saturate(150%); -webkit-backdrop-filter:blur(18px) saturate(150%); position:relative; overflow:hidden; }
+      .executive-kpi:after { content:""; position:absolute; left:14px; right:14px; bottom:0; height:3px; border-radius:999px; background:linear-gradient(90deg,#5b7250,#aa9146); opacity:.86; }
+      .executive-kpi-head { display:flex; gap:10px; align-items:flex-start; min-height:42px; }
+      .executive-icon { width:36px; height:36px; border-radius:13px; display:grid; place-items:center; flex:0 0 auto; background:rgba(162,137,73,.13); color:#827039; border:1px solid rgba(162,137,73,.18); font-weight:900; font-size:11px; letter-spacing:.02em; }
+      .executive-kpi span { color:#242528; font-weight:800; line-height:1.18; }
+      .executive-kpi strong { display:block; margin-top:12px; font-size:clamp(1.8rem,2.8vw,2.35rem); line-height:1; color:#4f5430; letter-spacing:-.03em; }
+      .executive-trend { margin-top:12px; color:#686155; font-size:12px; font-weight:700; }
+      .executive-main-grid { display:grid; grid-template-columns:1.05fr 1fr .9fr; gap:14px; align-items:stretch; }
+      .executive-stack { display:grid; gap:14px; }
+      .executive-panel { border:1px solid rgba(255,255,255,.76); border-radius:20px; background:linear-gradient(135deg,rgba(255,255,255,.5),rgba(255,255,255,.18)); box-shadow:0 18px 44px rgba(32,27,18,.12), inset 0 1px 0 rgba(255,255,255,.8); backdrop-filter:blur(18px) saturate(150%); -webkit-backdrop-filter:blur(18px) saturate(150%); padding:18px; }
+      .executive-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+      .executive-panel-title { display:flex; align-items:center; gap:10px; margin:0; color:#242528; font-size:19px; font-weight:900; }
+      .executive-link { border:1px solid rgba(120,104,72,.18); background:rgba(255,255,255,.44); color:#62553a; border-radius:12px; padding:8px 12px; font-weight:800; cursor:pointer; }
+      .action-list { display:grid; gap:8px; }
+      .action-row { display:grid; grid-template-columns:42px minmax(0,1fr) auto 24px; gap:12px; align-items:center; padding:12px; border:1px solid rgba(95,85,65,.11); border-radius:14px; background:rgba(255,255,255,.34); }
+      .action-row strong { display:block; color:#252629; font-size:14px; }
+      .action-row span { color:#6e675d; font-size:12px; font-weight:700; }
+      .status-chip { border-radius:999px; padding:6px 10px; background:rgba(165,141,74,.14); color:#806b36; border:1px solid rgba(165,141,74,.18); font-size:12px; font-weight:900; }
+      .pipeline-flow { display:grid; grid-template-columns:repeat(5,minmax(70px,1fr)); gap:8px; margin:8px 0 14px; }
+      .pipeline-stage { position:relative; min-height:112px; padding:13px 10px; border:1px solid rgba(165,141,74,.26); background:rgba(255,255,255,.38); border-radius:14px; text-align:center; display:grid; align-content:center; gap:8px; }
+      .pipeline-stage.active { background:linear-gradient(150deg,rgba(92,110,76,.9),rgba(171,146,72,.78)); color:#fff; }
+      .pipeline-stage small { color:inherit; opacity:.86; font-weight:800; }
+      .pipeline-stage strong { font-size:28px; line-height:1; }
+      .pipeline-list { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; color:#6b6459; font-weight:750; font-size:13px; }
+      .chart-row { display:grid; grid-template-columns:160px 1fr; gap:18px; align-items:center; }
+      .semi-ring { width:148px; height:92px; border-radius:148px 148px 0 0; background:conic-gradient(from 270deg,var(--ring-a,#71875f) 0 var(--ring-pct,65%),#dccb9e var(--ring-pct,65%) 100%); position:relative; overflow:hidden; }
+      .semi-ring:after { content:""; position:absolute; left:22px; right:22px; bottom:0; height:70px; border-radius:110px 110px 0 0; background:rgba(255,255,255,.78); }
+      .semi-ring-label { position:absolute; left:0; right:0; bottom:8px; z-index:1; text-align:center; font-weight:900; color:#2b2c2d; }
+      .semi-ring-label strong { display:block; font-size:26px; line-height:1; }
+      .legend-list { display:grid; gap:9px; }
+      .legend-item { display:flex; justify-content:space-between; gap:12px; color:#5e574d; font-weight:800; font-size:13px; }
+      .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:8px; background:#71875f; }
+      .quick-actions-strip { display:grid; grid-template-columns:220px repeat(4,minmax(160px,1fr)); gap:12px; align-items:center; }
+      .quick-title { display:flex; gap:12px; align-items:center; color:#242528; font-size:20px; font-weight:900; }
+      .quick-action-card { display:grid; grid-template-columns:42px 1fr 20px; gap:12px; align-items:center; min-height:72px; border:1px solid rgba(255,255,255,.7); border-radius:16px; background:rgba(255,255,255,.42); padding:12px; cursor:pointer; text-align:left; color:#242528; font:inherit; box-shadow:inset 0 1px 0 rgba(255,255,255,.7); }
+      .quick-action-card strong { display:block; font-weight:900; }
+      .quick-action-card span { color:#70695d; font-size:12px; font-weight:700; }
+      @media (max-width:1300px) { .executive-kpi-grid { grid-template-columns:repeat(3,1fr); } .executive-main-grid { grid-template-columns:1fr; } .quick-actions-strip { grid-template-columns:1fr 1fr; } }
+      @media (max-width:760px) { .executive-kpi-grid,.pipeline-flow,.quick-actions-strip { grid-template-columns:1fr; } .chart-row { grid-template-columns:1fr; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function asDate(value) {
+    if (!value) return null;
+    var date = parseAppDate(value);
+    return date && !Number.isNaN(date.getTime()) ? date : null;
+  }
+
+  function inRange(dateValue, start, end) {
+    var date = asDate(dateValue);
+    return Boolean(date && date >= start && date <= end);
+  }
+
+  function datePlus(days) {
+    var date = asDate(todayIso()) || new Date();
+    date.setDate(date.getDate() + days);
+    return date;
+  }
+
+  function visibleRows(table) {
+    return (state.rows[table] || []).filter(function (row) { return rowVisibleByHierarchy(table, row); });
+  }
+
+  function isActiveEmployee(row) {
+    var status = String(row.status || '').toLowerCase();
+    return !['resigned', 'inactive', 'terminated', 'cancelled'].some(function (word) { return status.includes(word); });
+  }
+
+  function isPending(row) {
+    return String(row.approval_status || row.status || 'Pending').toLowerCase().includes('pending');
+  }
+
+  function leaveOverlapsToday(row) {
+    var today = asDate(todayIso());
+    var start = asDate(row.start_date);
+    var end = asDate(row.end_date);
+    var status = String(row.approval_status || '').toLowerCase();
+    return Boolean(today && start && end && start <= today && end >= today && status.includes('approved'));
+  }
+
+  function recruitmentStatus(row) {
+    return String(row.status || 'Open').toLowerCase();
+  }
+
+  function isOpenRecruitment(row) {
+    var status = recruitmentStatus(row);
+    return !['joined', 'rejected', 'closed', 'cancelled'].some(function (word) { return status.includes(word); });
+  }
+
+  function isInterviewThisWeek(row) {
+    var today = asDate(todayIso()) || new Date();
+    var weekEnd = datePlus(7);
+    if (inRange(row.interview_date, today, weekEnd)) return true;
+    return recruitmentStatus(row).includes('interview');
+  }
+
+  function documentIsAlert(row) {
+    var status = String(row.status || '').toLowerCase();
+    if (status && !status.includes('valid') && !status.includes('active')) return true;
+    var expiry = row.expiry_date || row.reminder_date || row.emirates_id_expiry || row.passport_expiry;
+    return inRange(expiry, asDate(todayIso()) || new Date(), datePlus(60));
+  }
+
+  function probationDue(row) {
+    return inRange(row.probation_completion_date, asDate(todayIso()) || new Date(), datePlus(30));
+  }
+
+  function kpiCard(label, value, code, note) {
+    return `<article class="executive-kpi"><div class="executive-kpi-head"><div class="executive-icon">${escapeHtml(code)}</div><span>${escapeHtml(label)}</span></div><strong>${escapeHtml(value)}</strong><div class="executive-trend">${escapeHtml(note || 'Live HRMS data')}</div></article>`;
+  }
+
+  function actionRow(code, title, detail, count, status, pageKey) {
+    return `<button type="button" class="action-row" data-dashboard-page="${escapeHtml(pageKey || 'dashboard')}"><div class="executive-icon">${escapeHtml(code)}</div><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div><span class="status-chip">${escapeHtml(status || 'Review')}</span><strong>${escapeHtml(count)}</strong></button>`;
+  }
+
+  function pipelineStage(label, value, active) {
+    return `<div class="pipeline-stage ${active ? 'active' : ''}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`;
+  }
+
+  function quickAction(code, title, subtitle, pageKey) {
+    return `<button type="button" class="quick-action-card" data-dashboard-page="${escapeHtml(pageKey)}"><div class="executive-icon">${escapeHtml(code)}</div><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></div><strong>&gt;</strong></button>`;
+  }
+
+  function renderExecutiveDashboard() {
+    installExecutiveDashboardStyles();
+    $('#dashboard').hidden = false;
+    $('#tablePage').hidden = true;
+    $('#pageTitle').textContent = 'Dashboard';
+    setTopActions();
+
+    var employees = visibleRows('employees');
+    var recruitment = visibleRows('recruitment');
+    var leaveRows = visibleRows('leave_management');
+    var documents = visibleRows('documents');
+    var joining = visibleRows('joining_checklist');
+    var interviews = visibleRows('interview_evaluation');
+
+    var activeEmployees = employees.filter(isActiveEmployee).length;
+    var onLeaveToday = leaveRows.filter(leaveOverlapsToday).length;
+    var pendingLeave = leaveRows.filter(function (row) { return isPending(row); }).length;
+    var openRecruitment = recruitment.filter(isOpenRecruitment).length;
+    var interviewsThisWeek = recruitment.filter(isInterviewThisWeek).length + interviews.filter(isInterviewThisWeek).length;
+    var documentAlerts = documents.filter(documentIsAlert).length;
+    var probationReviews = employees.filter(probationDue).length;
+    var onboardingTasks = joining.filter(function (row) { return !String(row.status || '').toLowerCase().includes('complete'); }).length;
+
+    var stages = {
+      open: recruitment.filter(function (row) { var s = recruitmentStatus(row); return s.includes('open') || s.includes('applied') || !s; }).length,
+      screening: recruitment.filter(function (row) { var s = recruitmentStatus(row); return s.includes('screen') || s.includes('shortlist'); }).length,
+      interview: recruitment.filter(function (row) { return recruitmentStatus(row).includes('interview'); }).length,
+      offered: recruitment.filter(function (row) { var s = recruitmentStatus(row); return s.includes('offer') || s.includes('selected'); }).length,
+      joined: recruitment.filter(function (row) { return recruitmentStatus(row).includes('joined'); }).length
+    };
+    var totalCandidates = recruitment.length || 0;
+    var plannedLeave = leaveRows.filter(function (row) { var start = asDate(row.start_date); var status = String(row.approval_status || '').toLowerCase(); return start && start > (asDate(todayIso()) || new Date()) && status.includes('approved'); }).length;
+    var availableEmployees = Math.max(0, activeEmployees - onLeaveToday);
+    var compliantDocs = Math.max(0, documents.length - documentAlerts);
+    var compliancePct = documents.length ? Math.round((compliantDocs / documents.length) * 100) : 100;
+    var leavePct = activeEmployees ? Math.min(100, Math.round((availableEmployees / activeEmployees) * 100)) : 100;
+
+    $('#dashboard').innerHTML = `
+      <section class="executive-dashboard">
+        <div class="executive-kpi-grid">
+          ${kpiCard('Active Employees', activeEmployees, 'EMP', 'Current active workforce')}
+          ${kpiCard('On Leave Today', onLeaveToday, 'LV', 'Approved leave today')}
+          ${kpiCard('Pending Leave Approvals', pendingLeave, 'APR', 'Awaiting Superuser action')}
+          ${kpiCard('Open Recruitment', openRecruitment, 'JOB', 'Open candidate records')}
+          ${kpiCard('Interviews This Week', interviewsThisWeek, 'INT', 'Scheduled or due this week')}
+          ${kpiCard('Document Expiry Alerts', documentAlerts, 'DOC', 'Expiry or non-valid records')}
+        </div>
+        <div class="executive-main-grid">
+          <section class="executive-panel">
+            <div class="executive-panel-head"><h3 class="executive-panel-title"><span class="executive-icon">PC</span>Today’s P&C Action Center</h3><button class="executive-link" data-dashboard-page="leave_management">View All</button></div>
+            <div class="action-list">
+              ${actionRow('LV', 'Leave Approvals', 'Review and approve pending leave requests', pendingLeave, 'Pending', 'leave_management')}
+              ${actionRow('DOC', 'Document Expiry Alerts', 'Review expiring employee documents', documentAlerts, 'Due Soon', 'documents')}
+              ${actionRow('PRO', 'Probation Reviews', 'Probation completion due within 30 days', probationReviews, 'Review', 'employees')}
+              ${actionRow('ONB', 'Onboarding Tasks', 'Pending joining checklist items', onboardingTasks, 'Due Soon', 'joining_checklist')}
+              ${actionRow('INT', 'Interviews This Week', 'Candidate interviews requiring follow-up', interviewsThisWeek, 'Scheduled', 'recruitment')}
+            </div>
+          </section>
+          <section class="executive-panel">
+            <div class="executive-panel-head"><h3 class="executive-panel-title"><span class="executive-icon">REC</span>Recruitment Pipeline</h3><button class="executive-link" data-dashboard-page="recruitment">View Jobs</button></div>
+            <div class="pipeline-flow">
+              ${pipelineStage('Open', stages.open, false)}
+              ${pipelineStage('Screening', stages.screening, false)}
+              ${pipelineStage('Interview', stages.interview, true)}
+              ${pipelineStage('Offered', stages.offered, false)}
+              ${pipelineStage('Joined', stages.joined, false)}
+            </div>
+            <div class="pipeline-list">
+              <span><span class="legend-dot"></span>Total Candidates</span><strong>${totalCandidates}</strong>
+              <span><span class="legend-dot"></span>Open Recruitment</span><strong>${openRecruitment}</strong>
+              <span><span class="legend-dot"></span>Interviews This Week</span><strong>${interviewsThisWeek}</strong>
+              <span><span class="legend-dot"></span>Offered / Selected</span><strong>${stages.offered}</strong>
+            </div>
+          </section>
+          <div class="executive-stack">
+            <section class="executive-panel">
+              <div class="executive-panel-head"><h3 class="executive-panel-title"><span class="executive-icon">LV</span>Leave Overview</h3><button class="executive-link" data-dashboard-page="leave_management">Details</button></div>
+              <div class="chart-row"><div class="semi-ring" style="--ring-pct:${leavePct}%;--ring-a:#71875f"><div class="semi-ring-label"><strong>${activeEmployees}</strong><span>Employees</span></div></div><div class="legend-list"><div class="legend-item"><span><i class="legend-dot"></i>On Leave Today</span><strong>${onLeaveToday}</strong></div><div class="legend-item"><span><i class="legend-dot"></i>Planned Leave</span><strong>${plannedLeave}</strong></div><div class="legend-item"><span><i class="legend-dot"></i>Available</span><strong>${availableEmployees}</strong></div></div></div>
+            </section>
+            <section class="executive-panel">
+              <div class="executive-panel-head"><h3 class="executive-panel-title"><span class="executive-icon">DOC</span>Document Compliance</h3><button class="executive-link" data-dashboard-page="documents">Details</button></div>
+              <div class="chart-row"><div class="semi-ring" style="--ring-pct:${compliancePct}%;--ring-a:#71875f"><div class="semi-ring-label"><strong>${compliancePct}%</strong><span>Compliant</span></div></div><div class="legend-list"><div class="legend-item"><span><i class="legend-dot"></i>Compliant</span><strong>${compliantDocs}</strong></div><div class="legend-item"><span><i class="legend-dot"></i>Due Soon / Alerts</span><strong>${documentAlerts}</strong></div><div class="legend-item"><span><i class="legend-dot" style="background:#b44d3e"></i>Total Records</span><strong>${documents.length}</strong></div></div></div>
+            </section>
+          </div>
+        </div>
+        ${isSuperUser() ? `<section class="executive-panel quick-actions-strip"><div class="quick-title"><span class="executive-icon">SU</span><span>Superuser<br>Quick Actions</span></div>${quickAction('EMP','Add Employee','Create or update employee profile','employees')}${quickAction('LV','Review Leave','Approve or reject leave requests','leave_management')}${quickAction('DOC','Issue P&C Document','Generate official documentation','pc_documentation')}${quickAction('ATT','Attendance Timesheet','Open payroll attendance hub','attendance')}</section>` : ''}
+      </section>`;
+  }
+
+  var originalDashboardLoader = loadDashboardData;
+  loadDashboardData = async function (options) {
+    await originalDashboardLoader(options || {});
+    await loadTables(['joining_checklist', 'interview_evaluation'], { optional: true });
+  };
+
+  renderDashboard = renderExecutiveDashboard;
+  document.addEventListener('click', function (event) {
+    var target = event.target.closest('[data-dashboard-page]');
+    if (!target) return;
+    var page = target.dataset.dashboardPage;
+    if (page) showPage(page);
+  });
+})();
+</script>
 </body>
 </html>
