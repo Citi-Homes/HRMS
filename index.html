@@ -2411,7 +2411,229 @@ document.addEventListener("change", async (event) => {
     const preview = $("#pcDocPreview")?.innerHTML || "";
     const printWindow = window.open("", "_blank", "width=900,height=1000");
     if (!printWindow) { alert("Please allow pop-ups to print or save PDF."); return; }
-    printWindow.document.write(`<!doctype html><html><head><title>P&C Documentation</title><style>body{margin:0;padding:28px;background:#fff;color:#202124}.pc-letter-paper{font-family:Georgia,'Times New Roman',serif;line-height:1.72;padding:22px}.pc-letter-head{display:flex;align-items:center;gap:16px;border-bottom:2px solid #9c8342;padding-bottom:16px;margin-bottom:28px}.pc-letter-logo{width:58px;height:74px;border-radius:20px;display:grid;place-items:center;color:white;font:800 18px Arial;background:linear-gradient(145deg,#2e2e2d,#a58b45)}.pc-letter-title strong{display:block;font:800 28px Arial;color:#2a2b2d}.pc-letter-title span{display:block;font:700 15px Arial;color:#9c8342}.pc-letter-meta{display:flex;justify-content:space-between;font:600 13px Arial;color:#575044;margin-bottom:26px}.pc-letter-subject{text-align:center;font-weight:800;text-decoration:underline;margin:22px 0}.pc-letter-sign{margin-top:52px;font-family:Arial;font-weight:700}</style></head><body>${preview}</body></html>`);
+    printWindow.document.write(`<!doctype html><html><head><title>P&C Documentation</title><style>body{margin:0;padding:28px;background:#fff;color:#202124}.pc-letter-paper{font-family:Georgia,'Times New Roman',serif;line-height:1.72;padding:22px}.pc-letter-head{display:flex;align-items:center;gap:16px;border-bottom:2px solid #9c8342;padding-bottom:16px;margin-bottom:28px}.pc-letter-logo{width:58px;height:74px;border-radius:20px;display:grid;place-items:center;color:white;font:800 18px Arial;background:linear-gradient(145deg,#2e2e2d,#a58b45)}.pc-letter-title strong{display:block;font:800 28px Arial;color:#2a2b2d}.pc-letter-title span{display:block;font:700 15px Arial;color:#9c8342}.pc-letter-meta{display:flex;justify-content:space-between;font:600 13px Arial;color:#575044;margin-bottom:26px}.pc-letter-subject{text-align:center;font-weight:800;text-decoration:underline;margin:22px 0}.pc-letter-sign{margin-top:52px;font-family:Arial;font-weight:700}</style></head><body>${preview}
+
+<script>
+(function citiHomesOpenPositionsPatchFn() {
+  if (window.__citiHomesOpenPositionsPatch) return;
+  window.__citiHomesOpenPositionsPatch = true;
+
+  var openPositionFields = ["position_title", "department", "vacancies", "location", "priority", "target_date", "status", "remarks"];
+  var openPositionStatuses = ["Active", "On Hold", "Closed", "Cancelled"];
+  var openPositionPriorities = ["Normal", "Urgent", "Critical"];
+
+  columns.open_positions = openPositionFields;
+
+  var baseCanViewTable = canViewTable;
+  canViewTable = function (table) {
+    if (table === "open_positions") return baseCanViewTable("recruitment") || isSuperUser();
+    return baseCanViewTable(table);
+  };
+
+  var baseCanEditTable = canEditTable;
+  canEditTable = function (table) {
+    if (table === "open_positions") return isSuperUser();
+    return baseCanEditTable(table);
+  };
+
+  var baseCanExportTable = canExportTable;
+  canExportTable = function (table) {
+    if (table === "open_positions") return isSuperUser() || canViewTable("recruitment");
+    return baseCanExportTable(table);
+  };
+
+  function installOpenPositionsStyles() {
+    if (document.getElementById("openPositionsStyles")) return;
+    var style = document.createElement("style");
+    style.id = "openPositionsStyles";
+    style.textContent = `
+      .open-positions-board { margin: 0 0 18px; padding: 18px; border: 1px solid rgba(255,255,255,.74); border-radius: 18px; background: linear-gradient(135deg, rgba(255,255,255,.58), rgba(255,255,255,.24)); box-shadow: 0 18px 42px rgba(34,29,20,.12), inset 0 1px 0 rgba(255,255,255,.76); backdrop-filter: blur(18px) saturate(145%); -webkit-backdrop-filter: blur(18px) saturate(145%); }
+      .open-positions-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+      .open-positions-head h3 { margin: 0; font-size: clamp(1.15rem, 1.7vw, 1.55rem); color: #26272a; }
+      .open-positions-meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+      .open-positions-chip { border: 1px solid rgba(154,133,73,.34); border-radius: 999px; padding: 8px 13px; background: rgba(255,255,255,.42); color: #74612f; font-weight: 800; white-space: nowrap; }
+      .open-positions-table { width: 100%; border-collapse: collapse; table-layout: fixed; overflow: hidden; border-radius: 15px; }
+      .open-positions-table th, .open-positions-table td { padding: 10px 9px; border-bottom: 1px solid rgba(65,58,46,.11); vertical-align: middle; }
+      .open-positions-table th { text-align: left; color: #756d62; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; background: rgba(255,255,255,.38); }
+      .open-positions-table input, .open-positions-table select { width: 100%; min-height: 36px; padding: 8px 10px; border-radius: 11px; border: 1px solid rgba(120,111,92,.18); background: rgba(255,255,255,.62); color: #25262a; font: inherit; }
+      .open-positions-table .position-title-col { width: 21%; }
+      .open-positions-table .department-col { width: 12%; }
+      .open-positions-table .vacancy-col { width: 8%; }
+      .open-positions-table .location-col { width: 12%; }
+      .open-positions-table .priority-col { width: 10%; }
+      .open-positions-table .target-col { width: 11%; }
+      .open-positions-table .status-col { width: 10%; }
+      .open-positions-table .action-col { width: 16%; }
+      .open-position-form { display: grid; grid-template-columns: 1.4fr .9fr .55fr .9fr .75fr .8fr .8fr; gap: 10px; align-items: end; margin-top: 14px; }
+      .open-position-form label { margin: 0; font-size: .82rem; font-weight: 800; color: #6f675d; }
+      .open-position-form input, .open-position-form select { width: 100%; min-height: 40px; margin-top: 6px; border-radius: 13px; border: 1px solid rgba(120,111,92,.18); background: rgba(255,255,255,.62); padding: 9px 12px; color: #25262a; font: inherit; }
+      .open-position-form button { min-height: 42px; border-radius: 999px; border: 0; padding: 0 18px; background: linear-gradient(135deg, #5f704f, #a38a48); color: #fff; font-weight: 800; box-shadow: 0 16px 34px rgba(55,47,31,.18); }
+      .open-position-message { margin-top: 10px; color: #9a4639; font-weight: 800; }
+      .open-position-message.success { color: #4f6c47; }
+      @media (max-width: 1200px) { .open-position-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .open-position-form button { grid-column: 1 / -1; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function openPositionStatus(row) {
+    return String(row.status || "Active").toLowerCase();
+  }
+
+  function isActiveOpenPosition(row) {
+    var status = openPositionStatus(row);
+    if (["hold", "on hold", "closed", "cancelled", "canceled", "filled", "inactive"].some(function (word) { return status.includes(word); })) return false;
+    return !status || ["active", "open", "urgent", "critical"].some(function (word) { return status.includes(word); });
+  }
+
+  function activeOpenVacancyCount() {
+    return (state.rows.open_positions || []).filter(isActiveOpenPosition).reduce(function (total, row) {
+      var vacancies = Number(String(row.vacancies || 1).replace(/[^0-9.]/g, ""));
+      return total + (Number.isFinite(vacancies) && vacancies > 0 ? vacancies : 1);
+    }, 0);
+  }
+
+  async function loadOpenPositions(options) {
+    if (!client || (!isSuperUser() && !canViewTable("open_positions"))) return;
+    if (!options?.force && state.rows.open_positions) return;
+    try {
+      state.rows.open_positions = await fetchRows("open_positions");
+      state.openPositionsError = "";
+    } catch (error) {
+      state.rows.open_positions = [];
+      state.openPositionsError = error.message || String(error);
+    }
+  }
+
+  var baseLoadDashboardData = loadDashboardData;
+  loadDashboardData = async function (options) {
+    await baseLoadDashboardData(options || {});
+    await loadOpenPositions({ ...(options || {}), force: Boolean(options?.force) });
+  };
+
+  var baseEnsurePageData = ensurePageData;
+  ensurePageData = async function (page, options) {
+    await baseEnsurePageData(page, options || {});
+    if (page?.table === "recruitment") await loadOpenPositions(options || {});
+  };
+
+  function openPositionInput(column, value, editable) {
+    var safe = String(value || "").replaceAll('"', "&quot;");
+    if (!editable) return `<span class="readonly-cell wide-text">${escapeHtml(value || "-")}</span>`;
+    if (column === "department") return `<select data-open-position-field="department">${options.department.map(function (item) { return `<option${item === value ? " selected" : ""}>${escapeHtml(item)}</option>`; }).join("")}</select>`;
+    if (column === "priority") return `<select data-open-position-field="priority">${openPositionPriorities.map(function (item) { return `<option${item === value ? " selected" : ""}>${escapeHtml(item)}</option>`; }).join("")}</select>`;
+    if (column === "status") return `<select data-open-position-field="status">${openPositionStatuses.map(function (item) { return `<option${item === (value || "Active") ? " selected" : ""}>${escapeHtml(item)}</option>`; }).join("")}</select>`;
+    if (column === "target_date") return `<input data-open-position-field="target_date" type="date" value="${safe}">`;
+    if (column === "vacancies") return `<input data-open-position-field="vacancies" type="number" min="1" step="1" value="${safe || 1}">`;
+    return `<input data-open-position-field="${column}" value="${safe}">`;
+  }
+
+  function openPositionPayload(container) {
+    var payload = {};
+    if (container.dataset.openPositionId) payload.id = Number(container.dataset.openPositionId);
+    container.querySelectorAll("[data-open-position-field]").forEach(function (input) {
+      var value = String(input.value || "").trim();
+      if (value !== "") payload[input.dataset.openPositionField] = value;
+    });
+    if (payload.vacancies !== undefined) payload.vacancies = Number(payload.vacancies) || 1;
+    if (!payload.status) payload.status = "Active";
+    return payload;
+  }
+
+  function renderOpenPositionsPanel() {
+    installOpenPositionsStyles();
+    var tableWrap = $("#dataTable")?.closest(".table-wrap");
+    if (!tableWrap) return;
+    var host = document.getElementById("openPositionsPanel");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "openPositionsPanel";
+      tableWrap.parentNode.insertBefore(host, tableWrap);
+    }
+    var rows = state.rows.open_positions || [];
+    var editable = canEditTable("open_positions");
+    var activeRows = rows.filter(isActiveOpenPosition).length;
+    var activeVacancies = activeOpenVacancyCount();
+    var errorHtml = state.openPositionsError ? `<div class="open-position-message">Open Positions table is not ready: ${escapeHtml(state.openPositionsError)}</div>` : "";
+    var body = rows.length ? rows.map(function (row, index) {
+      return `<tr data-open-position-id="${row.id || ""}"><td>${index + 1}</td>${openPositionFields.map(function (col) { return `<td>${openPositionInput(col, row[col], editable)}</td>`; }).join("")}<td class="row-actions">${editable ? `<button type="button" class="save-button" data-open-position-save>Save</button><button type="button" class="danger" data-open-position-delete>Delete</button>` : `<span class="view-only-pill">View only</span>`}</td></tr>`;
+    }).join("") : `<tr><td colspan="10" class="empty-state">No open positions added yet.</td></tr>`;
+    host.innerHTML = `<section class="open-positions-board glass">
+      <div class="open-positions-head"><h3>Open Positions</h3><div class="open-positions-meta"><span class="open-positions-chip">Active Positions: ${activeRows}</span><span class="open-positions-chip">Active Vacancies: ${activeVacancies}</span></div></div>
+      <table class="open-positions-table"><thead><tr><th>Sr. No</th><th class="position-title-col">Position Title</th><th class="department-col">Department</th><th class="vacancy-col">Vacancies</th><th class="location-col">Location</th><th class="priority-col">Priority</th><th class="target-col">Target Date</th><th class="status-col">Status</th><th>Remarks</th><th class="action-col">Action</th></tr></thead><tbody>${body}</tbody></table>
+      ${editable ? `<form id="openPositionForm" class="open-position-form"><label>Position Title<input data-open-position-field="position_title" required></label><label>Department<select data-open-position-field="department">${options.department.map(function (item) { return `<option>${escapeHtml(item)}</option>`; }).join("")}</select></label><label>Vacancies<input data-open-position-field="vacancies" type="number" min="1" step="1" value="1" required></label><label>Location<input data-open-position-field="location" placeholder="Abu Dhabi"></label><label>Priority<select data-open-position-field="priority">${openPositionPriorities.map(function (item) { return `<option>${escapeHtml(item)}</option>`; }).join("")}</select></label><label>Target Date<input data-open-position-field="target_date" type="date"></label><label>Status<select data-open-position-field="status">${openPositionStatuses.map(function (item) { return `<option>${escapeHtml(item)}</option>`; }).join("")}</select></label><button type="submit">Add Open Position</button></form>` : ""}
+      ${errorHtml}<div id="openPositionMessage" class="open-position-message"></div>
+    </section>`;
+  }
+
+  var baseRenderTablePage = renderTablePage;
+  renderTablePage = function (page) {
+    baseRenderTablePage(page);
+    var host = document.getElementById("openPositionsPanel");
+    if (page?.table === "recruitment") renderOpenPositionsPanel();
+    else if (host) host.remove();
+  };
+
+  function updateDashboardOpenPositions() {
+    var count = activeOpenVacancyCount();
+    document.querySelectorAll(".executive-kpi").forEach(function (card) {
+      var label = card.querySelector(".executive-kpi-head span")?.textContent?.trim();
+      if (label !== "Open Recruitment") return;
+      var value = card.querySelector("strong");
+      var note = card.querySelector(".executive-trend");
+      if (value) value.textContent = count;
+      if (note) note.textContent = "Active open vacancies";
+    });
+    document.querySelectorAll(".pipeline-list span").forEach(function (label) {
+      if (label.textContent.trim() !== "Open Recruitment") return;
+      var value = label.nextElementSibling;
+      if (value) value.textContent = count;
+    });
+  }
+
+  var baseRenderDashboard = renderDashboard;
+  renderDashboard = function () {
+    baseRenderDashboard();
+    updateDashboardOpenPositions();
+  };
+
+  document.addEventListener("submit", async function (event) {
+    if (event.target.id !== "openPositionForm") return;
+    event.preventDefault();
+    try {
+      if (!canEditTable("open_positions")) throw new Error("Only the superuser can update open positions.");
+      await upsertRow("open_positions", openPositionPayload(event.target));
+      state.rows.open_positions = await fetchRows("open_positions");
+      event.target.reset();
+      renderOpenPositionsPanel();
+      if (state.page === "dashboard") updateDashboardOpenPositions();
+    } catch (error) {
+      var message = document.getElementById("openPositionMessage");
+      if (message) message.textContent = error.message || error;
+      else alert(error.message || error);
+    }
+  });
+
+  document.addEventListener("click", async function (event) {
+    var save = event.target.closest("[data-open-position-save]");
+    var del = event.target.closest("[data-open-position-delete]");
+    if (!save && !del) return;
+    try {
+      if (!canEditTable("open_positions")) throw new Error("Only the superuser can update open positions.");
+      var row = event.target.closest("tr");
+      if (save) await upsertRow("open_positions", openPositionPayload(row));
+      if (del && confirm("Delete this open position?")) await deleteRow("open_positions", row.dataset.openPositionId);
+      state.rows.open_positions = await fetchRows("open_positions");
+      renderOpenPositionsPanel();
+      if (state.page === "dashboard") updateDashboardOpenPositions();
+    } catch (error) {
+      var message = document.getElementById("openPositionMessage");
+      if (message) message.textContent = error.message || error;
+      else alert(error.message || error);
+    }
+  });
+})();
+</script>
+</body></html>`);
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => printWindow.print(), 300);
