@@ -3063,5 +3063,238 @@ document.addEventListener("change", async (event) => {
   });
 })();
 </script>
+
+
+<script>
+(function citiHomesRecruitmentWorkflowPatchFn() {
+  if (window.__citiHomesRecruitmentWorkflowPatch) return;
+  window.__citiHomesRecruitmentWorkflowPatch = true;
+
+  var recruitmentProcessStatuses = ["Applied", "Screening", "Shortlisted", "Interview Scheduled", "Interview Completed", "Offer Stage", "Joined", "Closed"];
+  var postInterviewStatuses = ["Interview Completed", "Offer Stage", "Joined", "Closed"];
+  var interviewDecisionOptions = ["Selected", "Rejected", "On Hold"];
+
+  function installRecruitmentWorkflowStyles() {
+    if (document.getElementById("recruitmentWorkflowStyles")) return;
+    var style = document.createElement("style");
+    style.id = "recruitmentWorkflowStyles";
+    style.textContent = `
+      .recruitment-table th:nth-last-child(4), .recruitment-table td:nth-last-child(4),
+      .recruitment-table th:nth-last-child(3), .recruitment-table td:nth-last-child(3) { min-width: 150px; }
+      .recruitment-table th:nth-last-child(2), .recruitment-table td:nth-last-child(2) { min-width: 220px; }
+      .recruitment-table textarea[data-field="remarks"] { width: 100%; min-height: 38px; resize: vertical; border-radius: 12px; border: 1px solid rgba(120,111,92,.18); background: rgba(255,255,255,.62); padding: 8px 10px; color: #25262a; font: inherit; }
+      .decision-locked { opacity: .64; }
+      .decision-hint { display: block; margin-top: 5px; font-size: .72rem; color: #8a7f72; font-weight: 800; white-space: normal; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureRecruitmentColumns() {
+    var cols = columns.recruitment || [];
+    ["interview_decision", "remarks"].forEach(function (col) {
+      if (!cols.includes(col)) cols.push(col);
+    });
+    var tail = ["status", "interview_decision", "remarks"];
+    columns.recruitment = cols.filter(function (col) { return !tail.includes(col); }).concat(tail);
+  }
+
+  ensureRecruitmentColumns();
+
+  var baseTitleize = titleize;
+  titleize = function (value) {
+    if (value === "interview_decision") return "Interview Decision";
+    if (value === "remarks") return "Remarks";
+    return baseTitleize(value);
+  };
+
+  function parseLocalDate(value) {
+    if (!value) return null;
+    var parts = String(value).slice(0, 10).split("-").map(Number);
+    if (parts.length !== 3 || parts.some(function (part) { return !part; })) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+
+  function todayLocalDate() {
+    var now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  function interviewDatePassed(row) {
+    var date = parseLocalDate(row?.interview_date);
+    if (!date) return false;
+    return date < todayLocalDate();
+  }
+
+  function interviewScheduled(row) {
+    var status = String(row?.status || "").toLowerCase();
+    return status.includes("interview") || Boolean(row?.interview_date);
+  }
+
+  function decisionAvailable(row) {
+    return interviewScheduled(row) && interviewDatePassed(row);
+  }
+
+  function recruitmentStatusOptions(row) {
+    var base = recruitmentProcessStatuses.slice();
+    var current = row?.status ? String(row.status) : "Applied";
+    if (decisionAvailable(row)) {
+      interviewDecisionOptions.forEach(function (item) { if (!base.includes(item)) base.push(item); });
+      postInterviewStatuses.forEach(function (item) { if (!base.includes(item)) base.push(item); });
+    }
+    if (current && !base.includes(current)) base.push(current);
+    return base;
+  }
+
+  function selectMarkup(field, value, optionsList, disabled) {
+    var current = String(value || "");
+    var choices = optionsList.slice();
+    if (current && !choices.includes(current)) choices.push(current);
+    return `<select data-field="${field}"${disabled ? " disabled" : ""}>${choices.map(function (item) { return `<option${item === current ? " selected" : ""}>${escapeHtml(item)}</option>`; }).join("")}</select>`;
+  }
+
+  function recruitmentFieldControl(column, row, editable) {
+    var value = row[column] ?? "";
+    if (!editable && column !== "cv_link") return `<span class="readonly-cell wide-text">${escapeHtml(value || "-")}</span>`;
+    if (column === "status") return selectMarkup("status", value || "Applied", recruitmentStatusOptions(row), false);
+    if (column === "interview_decision") {
+      if (decisionAvailable(row)) return selectMarkup("interview_decision", value || "", [""].concat(interviewDecisionOptions), false);
+      var shown = value ? escapeHtml(value) : "Pending after interview";
+      return `<span class="readonly-cell decision-locked">${shown}</span><span class="decision-hint">Available after interview date passes</span>`;
+    }
+    if (column === "remarks") {
+      var safe = String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+      return `<textarea data-field="remarks" placeholder="Add remarks if needed">${safe}</textarea>`;
+    }
+    return fieldControl(column, column === "candidate" ? displayCandidateValue(row) : value, editable);
+  }
+
+  var baseRenderTable = renderTable;
+  renderTable = function (page, rows) {
+    if (page?.table !== "recruitment") return baseRenderTable(page, rows);
+    installRecruitmentWorkflowStyles();
+    ensureRecruitmentColumns();
+    var table = $("#dataTable");
+    var cols = columns.recruitment || [];
+    var tableCanEdit = canEditTable(page.table);
+    table.className = "compact-table recruitment-table";
+    if (!rows.length) {
+      table.innerHTML = `<tbody><tr><td class="empty-state">No records found.</td></tr></tbody>`;
+      return;
+    }
+    table.innerHTML = `
+      <thead><tr><th>Sr. No</th>${cols.map(function (col) { return `<th>${titleize(col)}</th>`; }).join("")}<th>Actions</th></tr></thead>
+      <tbody>
+        ${rows.map(function (row, index) { return `
+          <tr data-id="${row.id || ""}">
+            <td>${index + 1}</td>
+            ${cols.map(function (col) { return `<td>${recruitmentFieldControl(col, row, tableCanEdit)}</td>`; }).join("")}
+            <td class="row-actions">
+              ${tableCanEdit ? `${saveButtonMarkup(page.table, row.id)}<button type="button" class="danger" data-delete="${row.id}">Delete</button>` : `<span class="view-only-pill">View only</span>`}
+            </td>
+          </tr>`; }).join("")}
+      </tbody>`;
+  };
+
+  var baseRenderForm = renderForm;
+  renderForm = function (page) {
+    ensureRecruitmentColumns();
+    baseRenderForm(page);
+  };
+
+  var baseRowFromElement = rowFromElement;
+  rowFromElement = function (rowElement) {
+    var row = baseRowFromElement(rowElement);
+    rowElement.querySelectorAll("textarea[data-field]").forEach(function (input) {
+      row[input.dataset.field] = input.value.trim();
+    });
+    rowElement.querySelectorAll("select[data-field]").forEach(function (input) {
+      if (!input.disabled) row[input.dataset.field] = input.value.trim();
+    });
+    return row;
+  };
+
+  function csvCell(value) {
+    var text = String(value ?? "");
+    if (/[",\n]/.test(text)) return '"' + text.replaceAll('"', '""') + '"';
+    return text;
+  }
+
+  downloadRecruitmentTemplate = function () {
+    ensureRecruitmentColumns();
+    var headers = columns.recruitment.map(titleize);
+    var sample = ["Candidate Name", "https://onedrive.live.com/example-cv-link", "Position Applied", "LinkedIn / Referral / Walk-in", "05xxxxxxxx", "Abu Dhabi", "2 Years", "5 Years", "5000", "7000", "30 Days", "2026-08-12", "Interview Scheduled", "", "Initial screening remarks"];
+    var lines = [headers, sample].map(function (row) { return row.map(csvCell).join(","); });
+    var blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
+    var link = document.createElement("a");
+    var href = URL.createObjectURL(blob);
+    link.href = href;
+    link.download = "recruitment-import-template.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+  };
+
+  var baseMapImportRows = mapImportRows;
+  mapImportRows = function (table, rawRows) {
+    ensureRecruitmentColumns();
+    return baseMapImportRows(table, rawRows);
+  };
+
+  function isInterviewUpcomingThisWeek(row) {
+    var date = parseLocalDate(row?.interview_date);
+    if (!date) return false;
+    var today = todayLocalDate();
+    var weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + 7);
+    return date >= today && date <= weekEnd;
+  }
+
+  function upcomingInterviewCount() {
+    var recruitment = (state.rows.recruitment || []).filter(function (row) { return rowVisibleByHierarchy("recruitment", row); });
+    var evaluation = (state.rows.interview_evaluation || []).filter(function (row) { return rowVisibleByHierarchy("interview_evaluation", row); });
+    return recruitment.filter(isInterviewUpcomingThisWeek).length + evaluation.filter(isInterviewUpcomingThisWeek).length;
+  }
+
+  function updateDashboardInterviewCount() {
+    var count = upcomingInterviewCount();
+    document.querySelectorAll(".executive-kpi").forEach(function (card) {
+      var label = card.querySelector(".executive-kpi-head span")?.textContent?.trim();
+      if (label !== "Interviews This Week") return;
+      var value = card.querySelector("strong");
+      var note = card.querySelector(".executive-trend");
+      if (value) value.textContent = count;
+      if (note) note.textContent = "Upcoming interviews only";
+    });
+    document.querySelectorAll(".action-row").forEach(function (row) {
+      if (!row.textContent.includes("Interviews This Week")) return;
+      var strong = Array.from(row.querySelectorAll("strong")).pop();
+      if (strong) strong.textContent = count;
+    });
+    document.querySelectorAll(".pipeline-list span").forEach(function (label) {
+      if (label.textContent.trim() !== "Interviews This Week") return;
+      var value = label.nextElementSibling;
+      if (value) value.textContent = count;
+    });
+  }
+
+  var baseLoadDashboardData = loadDashboardData;
+  loadDashboardData = async function (options) {
+    await baseLoadDashboardData(options || {});
+    await loadTables(["interview_evaluation"], { optional: true });
+  };
+
+  var baseRenderDashboard = renderDashboard;
+  renderDashboard = function () {
+    baseRenderDashboard();
+    updateDashboardInterviewCount();
+  };
+
+  window.__citiHomesRecruitmentWorkflow = {
+    decisionAvailable: decisionAvailable,
+    isInterviewUpcomingThisWeek: isInterviewUpcomingThisWeek
+  };
+})();
+</script>
 </body>
 </html>
