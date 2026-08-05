@@ -306,7 +306,9 @@ function canViewPage(page) {
 
 function csvCell(value) {
   const text = String(value ?? "");
-  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  return /[",\
+\
+]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 function looksLikeDateValue(value) {
@@ -1431,7 +1433,8 @@ function downloadRecruitmentTemplate() {
   const headers = ["Candidate", "CV Link", "Position", "Source", "Mobile", "Location", "GCC Experience", "Total Experience", "Current Salary", "Expected Salary", "Notice Period", "Interview Date", "Status"];
   const sample = ["Candidate Name", "https://onedrive.live.com/example-cv-link", "Position Applied", "LinkedIn / Referral / Walk-in", "05xxxxxxxx", "Abu Dhabi", "2 Years", "5 Years", "5000", "7000", "30 Days", "2026-07-16", "Applied"];
   const lines = [headers, sample].map((row) => row.map(csvCell).join(","));
-  const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob([`\﻿${lines.join("\
+")}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   const href = URL.createObjectURL(blob);
   link.href = href;
@@ -1451,7 +1454,8 @@ function exportTableCsv(table) {
     header.map(csvCell).join(","),
     ...rows.map((row, index) => [index + 1, ...tableColumns.map((column) => row[column] ?? "")].map(csvCell).join(","))
   ];
-  const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob([`\﻿${lines.join("\
+")}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   const href = URL.createObjectURL(blob);
   link.href = href;
@@ -1480,7 +1484,9 @@ async function ensureExcelLibrary() {
 async function readImportRows(file) {
   if (file.name.toLowerCase().endsWith(".csv")) {
     const text = await file.text();
-    return text.split(/\r?\n/).filter(Boolean).map((line) => line.split(","));
+    return text.split(/\
+?\
+/).filter(Boolean).map((line) => line.split(","));
   }
   await ensureExcelLibrary();
   const buffer = await file.arrayBuffer();
@@ -2106,7 +2112,8 @@ document.addEventListener("change", async (event) => {
   function hours(minutes) { return (minutes / 60).toFixed(2); }
   function csvEscape(value) {
     const text = String(value ?? "");
-    return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+    return /[",\
+]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
   }
   async function fetchAttendanceRows(monthValue) {
     const bounds = monthBounds(monthValue);
@@ -2185,7 +2192,8 @@ document.addEventListener("change", async (event) => {
     if (!rows.length) { alert("No payroll timesheet data available to export."); return; }
     const header = ["Emp Code", "Employee", "Department", "Month", "Working Days", "Total Hours", "Regular Hours", "Overtime Hours", "Missing Checkout", "Records"];
     const lines = [header.join(",")].concat(rows.map((row) => [row.emp_code || "", row.emp_name || "", row.department || "", monthValue, row.days.size, hours(row.total), hours(row.regular), hours(row.overtime), row.missing, row.records].map(csvEscape).join(",")));
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([lines.join("\
+")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -3215,7 +3223,8 @@ document.addEventListener("change", async (event) => {
 
   function csvCell(value) {
     var text = String(value ?? "");
-    if (/[",\n]/.test(text)) return '"' + text.replaceAll('"', '""') + '"';
+    if (/[",\
+]/.test(text)) return '"' + text.replaceAll('"', '""') + '"';
     return text;
   }
 
@@ -3224,7 +3233,8 @@ document.addEventListener("change", async (event) => {
     var headers = columns.recruitment.map(titleize);
     var sample = ["Candidate Name", "https://onedrive.live.com/example-cv-link", "Position Applied", "LinkedIn / Referral / Walk-in", "05xxxxxxxx", "Abu Dhabi", "2 Years", "5 Years", "5000", "7000", "30 Days", "2026-08-12", "Interview Scheduled", "", "Initial screening remarks"];
     var lines = [headers, sample].map(function (row) { return row.map(csvCell).join(","); });
-    var blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
+    var blob = new Blob([`\﻿${lines.join("\
+")}`], { type: "text/csv;charset=utf-8" });
     var link = document.createElement("a");
     var href = URL.createObjectURL(blob);
     link.href = href;
@@ -3242,6 +3252,8 @@ document.addEventListener("change", async (event) => {
   };
 
   function isInterviewUpcomingThisWeek(row) {
+    var status = String(row?.status || "").trim().toLowerCase();
+    if (status !== "interview scheduled") return false;
     var date = parseLocalDate(row?.interview_date);
     if (!date) return false;
     var today = todayLocalDate();
@@ -3253,7 +3265,7 @@ document.addEventListener("change", async (event) => {
   function upcomingInterviewCount() {
     var recruitment = (state.rows.recruitment || []).filter(function (row) { return rowVisibleByHierarchy("recruitment", row); });
     var evaluation = (state.rows.interview_evaluation || []).filter(function (row) { return rowVisibleByHierarchy("interview_evaluation", row); });
-    return recruitment.filter(isInterviewUpcomingThisWeek).length + evaluation.filter(isInterviewUpcomingThisWeek).length;
+    return recruitment.filter(isInterviewUpcomingThisWeek).length;
   }
 
   function updateDashboardInterviewCount() {
