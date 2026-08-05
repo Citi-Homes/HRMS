@@ -416,9 +416,14 @@ async function syncInterviewEvaluationFromRecruitment(row) {
     if (payload[key] === "" || payload[key] === null || payload[key] === undefined) delete payload[key];
   });
 
-  let query = client.from("interview_evaluation").select("id").eq("candidate", row.candidate).limit(1);
+  let query = client
+    .from("interview_evaluation")
+    .select("id, candidate, position, interview_date, created_at")
+    .eq("candidate", row.candidate)
+    .order("interview_date", { ascending: false, nullsFirst: false })
+    .order("id", { ascending: false })
+    .limit(5);
   if (row.position) query = query.eq("position", row.position);
-  if (row.interview_date) query = query.eq("interview_date", row.interview_date);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -657,15 +662,43 @@ function canApproveLeaveRow(row) {
 }
 
 
+function interviewEvaluationKey(row) {
+  const candidate = normalizePerson(displayCandidateValue(row));
+  const position = normalizePerson(row?.position);
+  if (!candidate) return `row:${row?.id || Math.random()}`;
+  return [candidate, position || "no-position"].join("|");
+}
+
+function interviewEvaluationScore(row) {
+  const filled = Object.values(row || {}).filter((value) => String(value ?? "").trim()).length;
+  const hasDate = parseAppDate(row?.interview_date) ? 50 : 0;
+  const hasDecision = String(row?.final_decision || "").trim() ? 20 : 0;
+  return hasDate + hasDecision + filled;
+}
+
+function dedupeInterviewEvaluationRows(rows) {
+  const bestByKey = new Map();
+  rows.forEach((row, index) => {
+    const key = interviewEvaluationKey(row);
+    const current = bestByKey.get(key);
+    const candidate = { row, index, score: interviewEvaluationScore(row) };
+    if (!current || candidate.score > current.score || (candidate.score === current.score && Number(row.id || 0) > Number(current.row.id || 0))) {
+      bestByKey.set(key, candidate);
+    }
+  });
+  return [...bestByKey.values()].sort((a, b) => a.index - b.index).map((item) => item.row);
+}
+
 function filteredRows(page) {
   const rows = [...(state.rows[page.table] || [])];
   const search = state.search.trim().toLowerCase();
-  return rows.filter((row) => {
+  const filtered = rows.filter((row) => {
     const hierarchyOk = rowVisibleByHierarchy(page.table, row);
     const deptOk = page.key !== "employees" || state.activeFilter === "All" || departmentGroup(row.department) === state.activeFilter;
     const searchOk = !search || Object.values(row).join(" ").toLowerCase().includes(search);
     return hierarchyOk && deptOk && searchOk;
   });
+  return page.table === "interview_evaluation" ? dedupeInterviewEvaluationRows(filtered) : filtered;
 }
 
 
@@ -1230,7 +1263,7 @@ function renderTablePage(page) {
   const leaveFooter = $("#leavePolicyFooter");
   if (leaveFooter) leaveFooter.innerHTML = "";
   $("#summaryCards").innerHTML = `
-    ${metric("Total Records", (state.rows[page.table] || []).length)}
+    ${metric("Total Records", page.table === "interview_evaluation" ? rows.length : (state.rows[page.table] || []).length)}
     ${metric("Current View", rows.length)}
     ${metric("Added Today", rows.filter((row) => String(row.created_at || "").startsWith(new Date().toISOString().slice(0, 10))).length)}
   `;
